@@ -12,7 +12,7 @@ afterEach(async () => {
 
 describe("CLI script identity", () => {
   test("always uses Lato", () => {
-    expect(cliScriptName()).toBe("lato")
+    expect(cliScriptName()).toBe("lato-cli")
   })
 
   test("derives the Lato preference path from compatibility state", () => {

@@ -1,0 +1,107 @@
+name: cross-platform-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - lato-development
+  pull_request:
+
+concurrency:
+  group: ${{ format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: "build (${{ matrix.target.os }}/${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { os: "linux", arch: "x64", runner: "ubuntu-latest" }
+          - { os: "linux", arch: "arm64", runner: "ubuntu-latest" }
+          - { os: "linux", arch: "x64", avx2: false, runner: "ubuntu-latest" }
+          - { os: "linux", arch: "x64", abi: "musl", runner: "ubuntu-latest" }
+          - { os: "linux", arch: "arm64", abi: "musl", runner: "ubuntu-latest" }
+          - { os: "linux", arch: "x64", abi: "musl", avx2: false, runner: "ubuntu-latest" }
+          - { os: "darwin", arch: "arm64", runner: "macos-latest" }
+          - { os: "darwin", arch: "x64", runner: "macos-latest" }
+          - { os: "darwin", arch: "x64", avx2: false, runner: "macos-latest" }
+          - { os: "win32", arch: "arm64", runner: "windows-latest" }
+          - { os: "win32", arch: "x64", runner: "windows-latest" }
+          - { os: "win32", arch: "x64", avx2: false, runner: "windows-latest" }
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Build native binary
+        working-directory: packages/opencode
+        run: |
+          bun run script/build.ts --single --skip-install --skip-embed-web-ui
+
+      - name: Verify binary
+        working-directory: packages/opencode
+        run: |
+          NAME="lato-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }}"
+          BINARY="dist/${NAME}/bin/lato${{ matrix.target.os == 'win32' && '.exe' || '' }}"
+          chmod +x "${BINARY}"
+          "${BINARY}" --version
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lato-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }}
+          path: packages/opencode/dist/lato-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }}/bin/lato${{ matrix.target.os == 'win32' && '.exe' || '' }}
+          if-no-files-found: error
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run CLI identity tests
+        working-directory: packages/opencode
+        run: bun test --timeout 30000 test/cli/identity.test.ts
+
+      - name: Run executable entry point tests
+        working-directory: packages/opencode
+        run: bun test --timeout 30000 test/cli/executables.test.ts
+
+      - name: Run native state resolution tests
+        working-directory: packages/opencode
+        run: bun test --timeout 30000 test/cli/native-state.test.ts
+
+      - name: Run TUI preference persistence tests
+        working-directory: packages/tui
+        run: bun test --timeout 30000 test/prompt/persistence.test.ts
+
+      - name: Run TUI runtime tests
+        working-directory: packages/tui
+        run: bun test --timeout 30000 test/runtime.test.tsx

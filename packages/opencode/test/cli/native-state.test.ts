@@ -37,7 +37,7 @@ describe("compiled executable identity", () => {
       run.exited,
     ])
     if (code !== 0) throw new Error(`failed to execute lato (${code}): ${stderr}`)
-    expect(stdout.trim()).toBe("lato")
+    expect(stdout.trim()).toBe("lato-cli")
 
     const override = Bun.spawn([outfile], {
       cwd: root,
@@ -51,7 +51,7 @@ describe("compiled executable identity", () => {
       override.exited,
     ])
     if (overrideCode !== 0) throw new Error(`failed to execute identity override (${overrideCode}): ${overrideErr}`)
-    expect(overrideOut.trim()).toBe("lato")
+    expect(overrideOut.trim()).toBe("lato-cli")
   }, 60000)
 })
 
@@ -109,7 +109,7 @@ describe("native state resolution", () => {
     expect(result.lato).toBe(path.join(root, "state", "lato"))
     expect(result.entryPoint).toBe(result.lato)
     expect(result.latoName).toBe("lato")
-    expect(result.identity).toBe("lato")
+    expect(result.identity).toBe("lato-cli")
     expect(cliPreferenceState(result.lato)).toBe(result.lato)
 
     if (process.platform === "win32") {
