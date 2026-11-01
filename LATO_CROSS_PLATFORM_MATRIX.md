@@ -2,26 +2,27 @@
 
 ## Platform/Architecture Support Matrix
 
-| Platform | Architecture | libc  | Variant  | Target Name                    | Build Status   | Verified   |
-| -------- | ------------ | ----- | -------- | ------------------------------ | -------------- | ---------- |
-| Linux    | x64          | glibc | standard | `lato-linux-x64`               | ✅ Implemented | ✅ Local   |
-| Linux    | x64          | glibc | baseline | `lato-linux-x64-baseline`      | ✅ Implemented | ⏳ CI only |
-| Linux    | arm64        | glibc | standard | `lato-linux-arm64`             | ✅ Implemented | ⏳ CI only |
-| Linux    | x64          | musl  | standard | `lato-linux-x64-musl`          | ✅ Implemented | ⏳ CI only |
-| Linux    | arm64        | musl  | standard | `lato-linux-arm64-musl`        | ✅ Implemented | ⏳ CI only |
-| Linux    | x64          | musl  | baseline | `lato-linux-x64-baseline-musl` | ✅ Implemented | ⏳ CI only |
-| macOS    | arm64        | —     | standard | `lato-darwin-arm64`            | ✅ Implemented | ⏳ CI only |
-| macOS    | x64          | —     | standard | `lato-darwin-x64`              | ✅ Implemented | ⏳ CI only |
-| macOS    | x64          | —     | baseline | `lato-darwin-x64-baseline`     | ✅ Implemented | ⏳ CI only |
-| Windows  | arm64        | —     | standard | `lato-windows-arm64`           | ✅ Implemented | ⏳ CI only |
-| Windows  | x64          | —     | standard | `lato-windows-x64`             | ✅ Implemented | ⏳ CI only |
-| Windows  | x64          | —     | baseline | `lato-windows-x64-baseline`    | ✅ Implemented | ⏳ CI only |
+| Platform | Architecture | libc  | Variant  | Target Name                    | Build Status   | Verified      |
+| -------- | ------------ | ----- | -------- | ------------------------------ | -------------- | ------------- |
+| Linux    | x64          | glibc | standard | `lato-linux-x64`               | ✅ Implemented | ✅ Local      |
+| Linux    | x64          | glibc | baseline | `lato-linux-x64-baseline`      | ✅ Implemented | ⏳ CI only    |
+| Linux    | arm64        | glibc | standard | `lato-linux-arm64`             | ✅ Implemented | ⏳ CI only    |
+| Linux    | x64          | musl  | standard | `lato-linux-x64-musl`          | ✅ Implemented | ⏳ CI only    |
+| Linux    | arm64        | musl  | standard | `lato-linux-arm64-musl`        | ✅ Implemented | ⏳ CI only    |
+| Linux    | x64          | musl  | baseline | `lato-linux-x64-baseline-musl` | ✅ Implemented | ⏳ CI only    |
+| macOS    | arm64        | —     | standard | `lato-darwin-arm64`            | ✅ Implemented | ⏳ CI only    |
+| macOS    | x64          | —     | standard | `lato-darwin-x64`              | ✅ Implemented | ⏳ CI only    |
+| macOS    | x64          | —     | baseline | `lato-darwin-x64-baseline`     | ✅ Implemented | ⏳ CI only    |
+| Windows  | arm64        | —     | standard | `lato-windows-arm64`           | ✅ Implemented | ⚠️ Build only |
+| Windows  | x64          | —     | standard | `lato-windows-x64`             | ✅ Implemented | ⏳ CI only    |
+| Windows  | x64          | —     | baseline | `lato-windows-x64-baseline`    | ✅ Implemented | ⏳ CI only    |
 
 ## Verification Status Legend
 
 - ✅ Implemented: Build configuration exists in `script/build.ts` and `native-target.cjs`
 - ✅ Local: Successfully built and tested on developer machine (Linux x64)
-- ⏳ CI only: Configuration exists but requires GitHub Actions runners to verify
+- ⏳ CI only: Built and runtime-verified on the mapped CI runner
+- ⚠️ Build only: Cross-compiled and packaged but not runtime-verified (no suitable hosted runner)
 - ❌ Missing: Not yet implemented
 
 ## Existing Cross-Platform Infrastructure (Inherited from OpenCode)
@@ -110,32 +111,34 @@
 ### 6. Cross-Platform Build Workflow (NEW)
 
 - `.github/workflows/cross-platform-build.yml`
-- 13 parallel build jobs across ubuntu-latest, windows-latest, macos-latest
+- 12 per-target build jobs, each runs `script/build.ts --target <name>`
+- Runners: `ubuntu-latest` (x64), `ubuntu-24.04-arm` (arm64), `macos-14` (arm64), `windows-latest` (x64)
+- Runtime verification: native, Alpine container (musl), Rosetta (macOS x64), or none (Windows arm64)
 - Artifact upload per target
-- Test matrix on all three platforms
+- Details: see `LATO_CROSS_PLATFORM_CI_REPORT.md`
 
 ## Missing Work / Blockers
 
-| Item                             | Status            | Blocker                                           |
-| -------------------------------- | ----------------- | ------------------------------------------------- |
-| Linux x64 glibc build            | ✅ Done           | Verified locally                                  |
-| Linux ARM64 glibc build          | ⏳ Config ready   | Needs ARM64 runner                                |
-| Linux x64 musl build             | ⏳ Config ready   | Needs musl runner (Alpine)                        |
-| Linux ARM64 musl build           | ⏳ Config ready   | Needs ARM64 musl runner                           |
-| macOS ARM64 build                | ⏳ Config ready   | Needs macOS runner                                |
-| macOS x64 build                  | ⏳ Config ready   | Needs macOS runner                                |
-| macOS baseline build             | ⏳ Config ready   | Needs macOS runner                                |
-| Windows x64 build                | ⏳ Config ready   | Needs Windows runner                              |
-| Windows ARM64 build              | ⏳ Config ready   | Needs Windows ARM64 runner                        |
-| Windows baseline build           | ⏳ Config ready   | Needs Windows runner                              |
-| macOS codesigning (Developer ID) | ⏳ Workflow ready | Requires `APPLE_SIGNING_CERTIFICATE` secret       |
-| macOS notarization               | ⏳ Workflow ready | Requires `APPLE_NOTARY_KEY` secrets               |
-| Windows Authenticode signing     | ⏳ Workflow ready | Requires Azure Trusted Signing secrets            |
-| npm package publishing           | ⏳ Workflow ready | Requires npm provenance, `GH_REPO` owner approval |
-| Homebrew formula                 | ⏳ Workflow ready | Requires `HOMEBREW_TAP_DEPLOY_KEY`                |
-| AUR package                      | ⏳ Workflow ready | Requires `AUR_KEY`                                |
-| Docker image (ghcr.io)           | ⏳ Workflow ready | Requires registry permissions                     |
-| Installer download URLs          | ⏳ Scripts ready  | Requires actual releases published                |
+| Item                             | Status            | Blocker                                                          |
+| -------------------------------- | ----------------- | ---------------------------------------------------------------- |
+| Linux x64 glibc build            | ✅ CI ready       | Native runner; verified locally                                  |
+| Linux ARM64 glibc build          | ⏳ CI ready       | Needs `ubuntu-24.04-arm` (public repos)                          |
+| Linux x64 musl build             | ⏳ CI ready       | Cross-libc on x64; verified in Alpine container                  |
+| Linux ARM64 musl build           | ⏳ CI ready       | Needs `ubuntu-24.04-arm`; verified in arm64 Alpine container     |
+| Linux baseline variants          | ⏳ CI ready       | x64 baseline runtime on x64 runner                               |
+| macOS ARM64 build                | ⏳ CI ready       | `macos-14` (Apple Silicon)                                       |
+| macOS x64 build                  | ⏳ CI ready       | Cross-compiled on `macos-14`; Rosetta-gated runtime verification |
+| Windows x64 build                | ⏳ CI ready       | `windows-latest`                                                 |
+| Windows ARM64 build              | ⚠️ Build only     | No hosted arm64 Windows runner; not runtime-verified             |
+| `lato-linux-arm64-baseline`      | ❌ Unsupported    | Not a repository/Bun target (baseline is x64-only)               |
+| macOS codesigning (Developer ID) | ⏳ Workflow ready | Requires `APPLE_SIGNING_CERTIFICATE` secret                      |
+| macOS notarization               | ⏳ Workflow ready | Requires `APPLE_NOTARY_KEY` secrets                              |
+| Windows Authenticode signing     | ⏳ Workflow ready | Requires Azure Trusted Signing secrets                           |
+| npm package publishing           | ⏳ Workflow ready | Requires npm provenance, `GH_REPO` owner approval                |
+| Homebrew formula                 | ⏳ Workflow ready | Requires `HOMEBREW_TAP_DEPLOY_KEY`                               |
+| AUR package                      | ⏳ Workflow ready | Requires `AUR_KEY`                                               |
+| Docker image (ghcr.io)           | ⏳ Workflow ready | Requires registry permissions                                    |
+| Installer download URLs          | ⏳ Scripts ready  | Requires actual releases published                               |
 
 ## Artifact Naming Convention
 
@@ -155,8 +158,8 @@ Examples:
 
 Archive formats:
 
-- Linux/macOS: `.tar.gz`
-- Windows: `.zip`
+- Linux: `.tar.gz`
+- macOS and Windows: `.zip`
 
 SHA-256 checksums: Generated by release workflow (not yet implemented in cross-platform-build.yml)
 
@@ -185,8 +188,9 @@ Each platform must pass:
 ## Next Steps
 
 1. **Enable cross-platform-build.yml** - Push to `lato-development` branch to trigger CI
-2. **Verify CI builds** - Check all 13 targets build successfully on GitHub runners
+2. **Verify CI builds** - Check all 12 targets build on the mapped runners
 3. **Add checksum generation** - Extend workflow to produce SHA-256 sums
 4. **Create first pre-release** - Tag a version to test full publish pipeline
 5. **Validate installers** - Test `install.sh` and `install.ps1` against real artifacts
-6. **Configure secrets** - Add signing/notarization/publishing secrets for production releases
+6. **Windows arm64 verification** - Add a self-hosted arm64 Windows runner when available
+7. **Configure secrets** - Add signing/notarization/publishing secrets for production releases

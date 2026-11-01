@@ -1,10 +1,13 @@
-<# 
+<#
 .SYNOPSIS
     Lato CLI Installer for Windows
 
 .DESCRIPTION
     Downloads and installs the latest Lato CLI release for Windows.
     Run from PowerShell: irm https://raw.githubusercontent.com/lazyarjun2005-rgb/lato-tui/main/install.ps1 | iex
+
+    Asset names must match packages/opencode/script/build.ts:
+      lato-windows-<arch>[-baseline].zip
 
 .PARAMETER Version
     Specific version to install (default: latest)
@@ -29,12 +32,35 @@ function Write-Error { param([string]$Message) Write-Host "[ERROR] $Message" -Fo
 
 function Detect-Platform {
     $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
-    if ($arch -eq "AMD64" -or $arch -eq "x64") { $global:ARCH = "x64" }
-    elseif ($arch -eq "ARM64") { $global:ARCH = "arm64" }
-    else { Write-Error "Unsupported architecture: $arch"; exit 1 }
+    if ($arch -eq "AMD64" -or $arch -eq "x64") { $script:ARCH = "x64" }
+    elseif ($arch -eq "ARM64") { $script:ARCH = "arm64" }
+    else { Write-Error "Unsupported architecture: $arch. Lato publishes x64 and arm64 builds only."; exit 1 }
 
-    $global:OS = "win32"
+    $script:OS = "windows"
     Write-Info "Detected platform: $OS/$ARCH"
+}
+
+# Baseline builds target x64 CPUs without AVX2. arm64 has no baseline variant.
+function Test-Avx2 {
+    if ($script:ARCH -ne "x64") { return $true }
+    try {
+        $sig = @"
+[DllImport("kernel32.dll")]
+public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);
+"@
+        $k32 = Add-Type -MemberDefinition $sig -Name "LatoKernel32" -Namespace "LatoWin32" -PassThru -ErrorAction Stop
+        return [bool]$k32::IsProcessorFeaturePresent(40)
+    } catch {
+        return $true
+    }
+}
+
+function Get-AssetName {
+    $name = "lato-$($script:OS)-$($script:ARCH)"
+    if ($script:ARCH -eq "x64" -and -not (Test-Avx2)) {
+        $name = "$name-baseline"
+    }
+    return "$name.zip"
 }
 
 function Get-LatestVersion {
@@ -48,35 +74,31 @@ function Get-LatestVersion {
 }
 
 function Download-Binary {
-    param([string]$Version)
+    param([string]$Version, [string]$AssetName)
 
-    $assetName = "lato-$OS-$ARCH"
-    $url = "https://github.com/$REPO/releases/download/v$Version/$assetName.zip"
-    $outFile = "$env:TEMP\lato-$Version.zip"
+    $url = "https://github.com/$REPO/releases/download/v$Version/$AssetName"
+    $outFile = "$env:TEMP\$AssetName"
 
-    Write-Info "Downloading $assetName v$Version..."
+    Write-Info "Downloading $AssetName v$Version..."
     try {
         Invoke-WebRequest -Uri $url -OutFile $outFile -ErrorAction Stop
     } catch {
         Write-Error "Failed to download from $url"
         Write-Warn "This version/platform may not have a pre-built binary yet."
-        Write-Warn "Try building from source or check available releases at:"
-        Write-Warn "https://github.com/$REPO/releases"
+        Write-Warn "Check available releases at: https://github.com/$REPO/releases"
         exit 1
     }
 
-    $global:DOWNLOAD_FILE = $outFile
+    $script:DOWNLOAD_FILE = $outFile
 }
 
 function Extract-Binary {
-    param([string]$Version)
-
     Write-Info "Extracting binary..."
     $extractDir = "$env:TEMP\lato-extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
     New-Item -ItemType Directory -Path $extractDir | Out-Null
 
-    Expand-Archive -Path $global:DOWNLOAD_FILE -DestinationPath $extractDir -Force
+    Expand-Archive -Path $script:DOWNLOAD_FILE -DestinationPath $extractDir -Force
 
     $binary = Get-ChildItem $extractDir -Filter "lato*.exe" | Select-Object -First 1
     if (-not $binary) {
@@ -87,13 +109,13 @@ function Extract-Binary {
     if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null }
     $targetPath = Join-Path $InstallDir "lato-cli.exe"
     Move-Item $binary.FullName $targetPath -Force
-    $global:INSTALLED_PATH = $targetPath
+    $script:INSTALLED_PATH = $targetPath
 }
 
 function Verify-Install {
-    if (Test-Path $global:INSTALLED_PATH) {
+    if (Test-Path $script:INSTALLED_PATH) {
         try {
-            $versionOutput = & $global:INSTALLED_PATH --version
+            $versionOutput = & $script:INSTALLED_PATH --version
             Write-Success "Installed: $versionOutput"
             return $true
         } catch {
@@ -129,8 +151,9 @@ if ($Version -eq "latest") {
     Write-Info "Latest version: $Version"
 }
 
-Download-Binary $Version
-Extract-Binary $Version
+$assetName = Get-AssetName
+Download-Binary $Version $assetName
+Extract-Binary
 
 if (Verify-Install) {
     Update-Path

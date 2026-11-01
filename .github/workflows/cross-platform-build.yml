@@ -1,5 +1,24 @@
 name: cross-platform-build
 
+# Builds one exact Lato native target per matrix job using
+# `script/build.ts --target <name>`.
+#
+# Bun cross-compiles every target from any host (verified locally: x64 Linux
+# produced an aarch64 Linux ELF). Because cross-target builds need the other
+# platforms' native dependency packages, --skip-install is intentionally NOT
+# passed; script/build.ts then installs them with --os=* --cpu=* --libc=*.
+#
+# Runner architecture (explicit, not inferred from the OS label):
+#   ubuntu-latest      -> Linux x64
+#   ubuntu-24.04-arm   -> Linux arm64 (GitHub-hosted arm64; public repos)
+#   macos-14           -> macOS arm64 (Apple Silicon)
+#   windows-latest     -> Windows x64
+#
+# GitHub no longer offers a hosted Intel macOS runner, so macOS x64 is
+# cross-compiled on Apple Silicon and executed through Rosetta 2 when present;
+# otherwise it is build-only (reported, never faked). There is no hosted Windows
+# arm64 runner, so Windows arm64 is cross-compiled and not runtime-verified.
+
 on:
   workflow_dispatch:
   push:
@@ -19,25 +38,112 @@ env:
 
 jobs:
   build:
-    name: "build (${{ matrix.target.os }}/${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }})"
+    name: build (${{ matrix.target.name }})
     strategy:
       fail-fast: false
       matrix:
         target:
-          - { os: "linux", arch: "x64", runner: "ubuntu-latest" }
-          - { os: "linux", arch: "arm64", runner: "ubuntu-latest" }
-          - { os: "linux", arch: "x64", avx2: false, runner: "ubuntu-latest" }
-          - { os: "linux", arch: "x64", abi: "musl", runner: "ubuntu-latest" }
-          - { os: "linux", arch: "arm64", abi: "musl", runner: "ubuntu-latest" }
-          - { os: "linux", arch: "x64", abi: "musl", avx2: false, runner: "ubuntu-latest" }
-          - { os: "darwin", arch: "arm64", runner: "macos-latest" }
-          - { os: "darwin", arch: "x64", runner: "macos-latest" }
-          - { os: "darwin", arch: "x64", avx2: false, runner: "macos-latest" }
-          - { os: "win32", arch: "arm64", runner: "windows-latest" }
-          - { os: "win32", arch: "x64", runner: "windows-latest" }
-          - { os: "win32", arch: "x64", avx2: false, runner: "windows-latest" }
+          - {
+              name: "lato-linux-x64",
+              platform: "linux",
+              arch: "x64",
+              runner: "ubuntu-latest",
+              smoke: "native",
+              native_arch: true,
+            }
+          - {
+              name: "lato-linux-x64-baseline",
+              platform: "linux",
+              arch: "x64",
+              runner: "ubuntu-latest",
+              smoke: "native",
+              native_arch: true,
+            }
+          - {
+              name: "lato-linux-x64-musl",
+              platform: "linux",
+              arch: "x64",
+              runner: "ubuntu-latest",
+              smoke: "docker",
+              docker_platform: "linux/amd64",
+              native_arch: true,
+            }
+          - {
+              name: "lato-linux-x64-baseline-musl",
+              platform: "linux",
+              arch: "x64",
+              runner: "ubuntu-latest",
+              smoke: "docker",
+              docker_platform: "linux/amd64",
+              native_arch: true,
+            }
+          - {
+              name: "lato-linux-arm64",
+              platform: "linux",
+              arch: "arm64",
+              runner: "ubuntu-24.04-arm",
+              smoke: "native",
+              native_arch: true,
+            }
+          - {
+              name: "lato-linux-arm64-musl",
+              platform: "linux",
+              arch: "arm64",
+              runner: "ubuntu-24.04-arm",
+              smoke: "docker",
+              docker_platform: "linux/arm64",
+              native_arch: true,
+            }
+          - {
+              name: "lato-darwin-arm64",
+              platform: "darwin",
+              arch: "arm64",
+              runner: "macos-14",
+              smoke: "native",
+              native_arch: true,
+            }
+          - {
+              name: "lato-darwin-x64",
+              platform: "darwin",
+              arch: "x64",
+              runner: "macos-14",
+              smoke: "rosetta",
+              native_arch: false,
+            }
+          - {
+              name: "lato-darwin-x64-baseline",
+              platform: "darwin",
+              arch: "x64",
+              runner: "macos-14",
+              smoke: "rosetta",
+              native_arch: false,
+            }
+          - {
+              name: "lato-windows-x64",
+              platform: "windows",
+              arch: "x64",
+              runner: "windows-latest",
+              smoke: "native",
+              native_arch: true,
+            }
+          - {
+              name: "lato-windows-x64-baseline",
+              platform: "windows",
+              arch: "x64",
+              runner: "windows-latest",
+              smoke: "native",
+              native_arch: true,
+            }
+          - {
+              name: "lato-windows-arm64",
+              platform: "windows",
+              arch: "arm64",
+              runner: "windows-latest",
+              smoke: "none",
+              native_arch: false,
+            }
     runs-on: ${{ matrix.target.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -48,24 +154,103 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Build native binary
+      - name: Assert runner architecture matches target
+        if: matrix.target.native_arch == true
+        run: |
+          case "${{ matrix.target.arch }}" in
+            x64) want="X64" ;;
+            arm64) want="ARM64" ;;
+          esac
+          if [ "${{ runner.arch }}" != "$want" ]; then
+            echo "::error::Runner arch ${{ runner.arch }} does not match target arch ${{ matrix.target.arch }} (${{ matrix.target.name }})"
+            exit 1
+          fi
+          echo "Runner ${{ matrix.target.runner }} (${{ runner.arch }}) matches native target ${{ matrix.target.name }}"
+
+      - name: Build exact target
         working-directory: packages/opencode
         run: |
-          bun run script/build.ts --single --skip-install --skip-embed-web-ui
+          bun run script/build.ts --target "${{ matrix.target.name }}" --skip-embed-web-ui
 
-      - name: Verify binary
+      - name: Verify native binary
+        if: matrix.target.smoke == 'native'
         working-directory: packages/opencode
         run: |
-          NAME="lato-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }}"
-          BINARY="dist/${NAME}/bin/lato${{ matrix.target.os == 'win32' && '.exe' || '' }}"
-          chmod +x "${BINARY}"
-          "${BINARY}" --version
+          BIN="dist/${{ matrix.target.name }}/bin/lato${{ matrix.target.platform == 'windows' && '.exe' || '' }}"
+          if [ ! -f "$BIN" ]; then
+            echo "::error::Expected binary not found: $BIN"
+            exit 1
+          fi
+          chmod +x "$BIN" || true
+          "$BIN" --version
 
-      - name: Upload binary artifact
+      - name: Verify musl binary in Alpine
+        if: matrix.target.smoke == 'docker'
+        working-directory: packages/opencode
+        run: |
+          BIN="dist/${{ matrix.target.name }}/bin/lato"
+          if [ ! -f "$BIN" ]; then
+            echo "::error::Expected binary not found: $BIN"
+            exit 1
+          fi
+          chmod +x "$BIN"
+          docker run --rm --platform "${{ matrix.target.docker_platform }}" \
+            -v "$PWD/dist/${{ matrix.target.name }}/bin:/app:ro" \
+            alpine:3.20 /app/lato --version
+
+      - name: Verify macOS x64 via Rosetta
+        if: matrix.target.smoke == 'rosetta'
+        working-directory: packages/opencode
+        run: |
+          BIN="dist/${{ matrix.target.name }}/bin/lato"
+          if [ ! -f "$BIN" ]; then
+            echo "::error::Expected binary not found: $BIN"
+            exit 1
+          fi
+          chmod +x "$BIN"
+          if arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            arch -x86_64 "$BIN" --version
+          else
+            echo "::warning::Rosetta 2 is unavailable; ${{ matrix.target.name }} is build-only on this runner and is not runtime-verified."
+          fi
+
+      - name: Note cross-compiled target without runtime verification
+        if: matrix.target.smoke == 'none'
+        run: |
+          echo "::warning::${{ matrix.target.name }} was cross-compiled on ${{ matrix.target.runner }}; no hosted runner can execute it, so runtime verification is intentionally skipped."
+
+      - name: Package archive (Linux)
+        if: matrix.target.platform == 'linux'
+        working-directory: packages/opencode
+        run: |
+          mkdir -p out
+          tar -czf "out/${{ matrix.target.name }}.tar.gz" -C "dist/${{ matrix.target.name }}/bin" lato
+          ls -l "out/${{ matrix.target.name }}.tar.gz"
+
+      - name: Package archive (macOS)
+        if: matrix.target.platform == 'darwin'
+        working-directory: packages/opencode
+        run: |
+          mkdir -p out
+          zip -j "out/${{ matrix.target.name }}.zip" "dist/${{ matrix.target.name }}/bin/lato"
+          ls -l "out/${{ matrix.target.name }}.zip"
+
+      - name: Package archive (Windows)
+        if: matrix.target.platform == 'windows'
+        shell: pwsh
+        working-directory: packages/opencode
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $bin = "dist/${{ matrix.target.name }}/bin/lato.exe"
+          if (-not (Test-Path $bin)) { throw "Expected binary not found: $bin" }
+          Compress-Archive -Path $bin -DestinationPath "out/${{ matrix.target.name }}.zip" -Force
+          Get-Item "out/${{ matrix.target.name }}.zip" | Format-List
+
+      - name: Upload archive
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: lato-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }}
-          path: packages/opencode/dist/lato-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.abi && '-' + matrix.target.abi || '' }}${{ matrix.target.avx2 === false && '-baseline' || '' }}/bin/lato${{ matrix.target.os == 'win32' && '.exe' || '' }}
+          name: ${{ matrix.target.name }}
+          path: packages/opencode/out/
           if-no-files-found: error
 
   test:

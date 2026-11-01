@@ -2,6 +2,10 @@
 # Lato CLI Installer for Linux and macOS
 # Usage: curl -fsSL https://raw.githubusercontent.com/lazyarjun2005-rgb/lato-tui/main/install.sh | bash
 # Or: wget -qO- https://raw.githubusercontent.com/lazyarjun2005-rgb/lato-tui/main/install.sh | bash
+#
+# Asset names must match the artifacts produced by packages/opencode/script/build.ts:
+#   linux  -> lato-linux-<arch>[-baseline][-musl].tar.gz
+#   darwin -> lato-darwin-<arch>[-baseline].zip
 
 set -euo pipefail
 
@@ -46,25 +50,54 @@ detect_platform() {
     aarch64|arm64)
       ARCH="arm64"
       ;;
-    armv7l|armhf)
-      ARCH="arm"
-      ;;
     *)
-      log_error "Unsupported architecture: ${arch}"
+      log_error "Unsupported architecture: ${arch}. Lato publishes x64 and arm64 builds only."
       exit 1
       ;;
   esac
 
-  # Detect musl libc on Linux
-  if [ "${OS}" = "linux" ] && [ -f /etc/alpine-release ]; then
+  # Detect musl libc on Linux (glibc otherwise).
+  LIBC="gnu"
+  if [ "${OS}" = "linux" ] && { [ -f /etc/alpine-release ] || ldd --version 2>&1 | grep -qi musl; }; then
     LIBC="musl"
-  elif [ "${OS}" = "linux" ] && ldd --version 2>&1 | grep -qi musl; then
-    LIBC="musl"
-  else
-    LIBC="gnu"
   fi
 
-  log_info "Detected platform: ${OS}/${ARCH}${LIBC:+/${LIBC}}"
+  log_info "Detected platform: ${OS}/${ARCH} (${LIBC})"
+}
+
+# Baseline builds target x64 CPUs without AVX2. arm64 has no baseline variant.
+supports_avx2() {
+  [ "${ARCH}" = "x64" ] || return 0
+  case "${OS}" in
+    linux)
+      grep -qiE '(^|[[:space:]])avx2([[:space:]]|$)' /proc/cpuinfo 2>/dev/null
+      ;;
+    darwin)
+      [ "$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)" = "1" ]
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+asset_name() {
+  local name="lato-${OS}-${ARCH}"
+  if [ "${ARCH}" = "x64" ] && ! supports_avx2; then
+    name="${name}-baseline"
+  fi
+  if [ "${LIBC}" = "musl" ]; then
+    name="${name}-musl"
+  fi
+  echo "${name}"
+}
+
+asset_extension() {
+  if [ "${OS}" = "linux" ]; then
+    echo "tar.gz"
+  else
+    echo "zip"
+  fi
 }
 
 get_latest_version() {
@@ -76,42 +109,29 @@ get_latest_version() {
 }
 
 download_binary() {
-  local version="$1"
-  local asset_name="lato-${OS}-${ARCH}"
-  if [ "${LIBC}" = "musl" ]; then
-    asset_name="${asset_name}-musl"
-  fi
-  local extension="tar.gz"
-  if [ "${OS}" = "win32" ]; then
-    extension="zip"
-  fi
-  local url="https://github.com/${REPO}/releases/download/v${version}/${asset_name}.${extension}"
+  local version="$1" name="$2" extension="$3"
+  local url="https://github.com/${REPO}/releases/download/v${version}/${name}.${extension}"
 
-  log_info "Downloading ${asset_name} v${version}..."
-  if ! curl -fLsS "${url}" -o "/tmp/lato-${version}.${extension}"; then
+  log_info "Downloading ${name} v${version}..."
+  if ! curl -fLsS "${url}" -o "/tmp/${name}.${extension}"; then
     log_error "Failed to download from ${url}"
     log_warn "This version/platform may not have a pre-built binary yet."
-    log_warn "Try building from source or check available releases at:"
-    log_warn "https://github.com/${REPO}/releases"
+    log_warn "Check available releases at: https://github.com/${REPO}/releases"
     exit 1
   fi
 }
 
 extract_binary() {
-  local version="$1"
-  local extension="tar.gz"
-  if [ "${OS}" = "win32" ]; then
-    extension="zip"
-  fi
+  local version="$1" name="$2" extension="$3"
 
   log_info "Extracting binary..."
   mkdir -p "${INSTALL_DIR}"
   cd /tmp
 
   if [ "${extension}" = "tar.gz" ]; then
-    tar -xzf "lato-${version}.${extension}" lato
+    tar -xzf "${name}.${extension}" lato
   else
-    unzip -o "lato-${version}.${extension}" "lato*"
+    unzip -o "${name}.${extension}" "lato*"
   fi
 
   chmod +x lato
@@ -124,10 +144,9 @@ verify_install() {
     version_output=$("${INSTALL_DIR}/lato-cli" --version 2>&1 || true)
     log_success "Installed: ${version_output}"
     return 0
-  else
-    log_error "Installation verification failed"
-    return 1
   fi
+  log_error "Installation verification failed"
+  return 1
 }
 
 update_path() {
@@ -158,8 +177,12 @@ main() {
     log_info "Latest version: ${VERSION}"
   fi
 
-  download_binary "${VERSION}"
-  extract_binary "${VERSION}"
+  local name extension
+  name="$(asset_name)"
+  extension="$(asset_extension)"
+
+  download_binary "${VERSION}" "${name}" "${extension}"
+  extract_binary "${VERSION}" "${name}" "${extension}"
   verify_install
   update_path
 

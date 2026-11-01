@@ -25,6 +25,11 @@ const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+const targetIndex = process.argv.indexOf("--target")
+const targetFlag = targetIndex === -1 ? undefined : process.argv[targetIndex + 1]
+if (targetIndex !== -1 && !targetFlag) {
+  throw new Error("--target requires a Lato native target name, e.g. --target lato-linux-x64")
+}
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
@@ -116,26 +121,45 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) {
-        return false
-      }
+function targetName(item: (typeof allTargets)[number]) {
+  return nativeTargetName({
+    platform: item.os,
+    arch: item.arch,
+    baseline: item.avx2 === false,
+    musl: item.abi === "musl",
+  })
+}
 
-      // When building for the current platform, prefer a single native binary by default.
-      // Baseline binaries require additional Bun artifacts and can be flaky to download.
-      if (item.avx2 === false) {
-        return baselineFlag
-      }
+const targets = (() => {
+  if (targetFlag) {
+    const selected = allTargets.filter((item) => targetName(item) === targetFlag)
+    if (selected.length === 0) {
+      throw new Error(`Unknown --target "${targetFlag}". Supported targets: ${allTargets.map(targetName).join(", ")}`)
+    }
+    return selected
+  }
 
-      // also skip abi-specific builds for the same reason
-      if (item.abi !== undefined) {
-        return false
-      }
+  if (!singleFlag) return allTargets
 
-      return true
-    })
-  : allTargets
+  return allTargets.filter((item) => {
+    if (item.os !== process.platform || item.arch !== process.arch) {
+      return false
+    }
+
+    // When building for the current platform, prefer a single native binary by default.
+    // Baseline binaries require additional Bun artifacts and can be flaky to download.
+    if (item.avx2 === false) {
+      return baselineFlag
+    }
+
+    // also skip abi-specific builds for the same reason
+    if (item.abi !== undefined) {
+      return false
+    }
+
+    return true
+  })
+})()
 
 await $`rm -rf dist`
 
@@ -147,12 +171,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" --libc="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
-  const name = nativeTargetName({
-    platform: item.os,
-    arch: item.arch,
-    baseline: item.avx2 === false,
-    musl: item.abi === "musl",
-  })
+  const name = targetName(item)
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
