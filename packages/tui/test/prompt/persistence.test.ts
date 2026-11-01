@@ -41,6 +41,46 @@ test("atomic JSON writes remain valid under concurrent synthetic updates", async
   }
 })
 
+// Windows rename semantics can transiently fail when a concurrent reader holds
+// the destination, so this pairs writers with readers: successful reads must
+// never observe torn or out-of-range values, and writers must resolve without
+// leaving temporary files behind.
+test("atomic JSON writes stay valid while readers and writers contend", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "lato-tui-persistence-rw-"))
+  try {
+    const jsonPath = path.join(root, "kv.json")
+    await writeJsonAtomic(jsonPath, { value: 0 })
+    let reading = true
+    let reads = 0
+    const invalid: unknown[] = []
+    const reader = (async () => {
+      while (reading) {
+        const raw = await readText(jsonPath).catch(() => undefined)
+        if (raw === undefined) continue
+        try {
+          const result = JSON.parse(raw) as { value: number }
+          if (Number.isInteger(result.value) && result.value >= 0 && result.value < 20) reads++
+          else invalid.push(result)
+        } catch {
+          invalid.push(raw)
+        }
+        await Bun.sleep(1)
+      }
+    })()
+    await Promise.all(Array.from({ length: 20 }, (_, value) => writeJsonAtomic(jsonPath, { value })))
+    reading = false
+    await reader
+    expect(reads).toBeGreaterThan(0)
+    expect(invalid).toEqual([])
+    const result = await readJson<{ value: number }>(jsonPath)
+    expect(result.value).toBeGreaterThanOrEqual(0)
+    expect(result.value).toBeLessThan(20)
+    expect((await readdir(root)).filter((entry) => entry.endsWith(".tmp"))).toEqual([])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test("malformed JSON is reported without replacing the source file", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "opencode-tui-malformed-"))
   try {
