@@ -23,9 +23,6 @@ export function resolveCliCommand(input: CliCommandResolverInput) {
 
   const lato = input.find("lato")
   if (lato) return [lato]
-
-  const opencode = input.find("opencode")
-  if (opencode) return [opencode]
 }
 
 function isRuntime(value: string) {

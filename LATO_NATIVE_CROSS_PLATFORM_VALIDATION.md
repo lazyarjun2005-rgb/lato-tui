@@ -1,5 +1,7 @@
 # Lato Native Cross-Platform Validation
 
+> Historical Phase 3.9 validation. Phase 4.1 removes the OpenCode application entry point and changes the native build output to `lato`/`lato.exe`. References below to `bin/opencode`, `opencode` identity, and dual executable state describe the Phase 3.9 state and are superseded by `LATO_PHASE_4_1_REPORT.md`.
+
 Status: Phase 3.9 partially complete — Linux native validation executed; Windows and macOS CI definitions prepared but not executed because no native host or push-capable remote was available in this environment.
 
 No native Windows or macOS result is claimed from Linux mocks.

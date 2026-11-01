@@ -1,6 +1,58 @@
 import { createHash } from "node:crypto"
 import { access, constants, mkdir, open, readdir, lstat, readFile, realpath, rm, stat } from "node:fs/promises"
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path"
+import { Schema } from "effect"
+
+export type StoragePlatform = "linux" | "darwin" | "win32" | "other"
+
+export type StorageRoots = {
+  config: string
+  data: string
+  state: string
+  cache: string
+  logs: string
+  tmp: string
+}
+
+export function resolveStorageRoots(input: {
+  platform: StoragePlatform
+  home: string
+  env?: Record<string, string | undefined>
+}): StorageRoots {
+  const env = input.env ?? {}
+  const temporary = env.TMPDIR ?? env.TEMP ?? env.TMP ?? "/tmp"
+  if (input.platform === "darwin") {
+    const support = `${input.home}/Library/Application Support/Lato`
+    return {
+      config: support,
+      data: support,
+      state: `${support}/state`,
+      cache: `${input.home}/Library/Caches/Lato`,
+      logs: `${input.home}/Library/Logs/Lato`,
+      tmp: `${temporary}/lato`,
+    }
+  }
+  if (input.platform === "win32") {
+    const roaming = env.APPDATA ?? `${input.home}/AppData/Roaming`
+    const local = env.LOCALAPPDATA ?? `${input.home}/AppData/Local`
+    return {
+      config: `${roaming}/Lato`,
+      data: `${roaming}/Lato`,
+      state: `${local}/Lato/state`,
+      cache: `${local}/Lato/cache`,
+      logs: `${local}/Lato/logs`,
+      tmp: `${temporary}/Lato`,
+    }
+  }
+  return {
+    config: `${env.XDG_CONFIG_HOME ?? `${input.home}/.config`}/lato`,
+    data: `${env.XDG_DATA_HOME ?? `${input.home}/.local/share`}/lato`,
+    state: `${env.XDG_STATE_HOME ?? `${input.home}/.local/state`}/lato`,
+    cache: `${env.XDG_CACHE_HOME ?? `${input.home}/.cache`}/lato`,
+    logs: `${env.XDG_STATE_HOME ?? `${input.home}/.local/state`}/lato/log`,
+    tmp: `${temporary}/lato`,
+  }
+}
 
 export type StorageCategory =
   | "auth"
@@ -48,6 +100,52 @@ export type StoragePreview = {
   warnings: string[]
 }
 
+export const MigrationManifest = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("lato-storage-migration"),
+  sourceRoot: Schema.String,
+  destinationRoot: Schema.String,
+  createdAt: Schema.Number,
+  status: Schema.Literals(["preview", "staged", "verified", "failed", "rolled-back"]),
+  entries: Schema.Array(
+    Schema.Struct({
+      relativePath: Schema.String,
+      category: Schema.String,
+      kind: Schema.Literals(["file", "directory", "symlink"]),
+      action: Schema.Literals(["copy", "skip", "conflict"]),
+      conflict: Schema.optional(Schema.String),
+    }),
+  ),
+})
+
+export type MigrationManifest = typeof MigrationManifest.Type
+
+export function manifestFromPreview(preview: StoragePreview, createdAt = Date.now()): MigrationManifest {
+  const conflicts = new Map(preview.conflicts.map((conflict) => [conflict.relativePath, conflict.kind]))
+  return {
+    version: 1,
+    kind: "lato-storage-migration",
+    sourceRoot: preview.source.root,
+    destinationRoot: preview.destination?.root ?? resolve(preview.source.root, "lato-destination"),
+    createdAt,
+    status: "preview",
+    entries: preview.source.items.map((item) => {
+      const conflict = conflicts.get(item.relativePath)
+      return {
+        relativePath: item.relativePath,
+        category: item.category,
+        kind: item.kind,
+        action: conflict ? "conflict" : item.kind === "file" ? "copy" : "skip",
+        ...(conflict ? { conflict } : {}),
+      }
+    }),
+  }
+}
+
+export function validateMigrationManifest(input: unknown): MigrationManifest {
+  return Schema.decodeUnknownSync(MigrationManifest)(input)
+}
+
 export type SqliteStatement = {
   all: () => unknown[]
   get: () => unknown
@@ -65,6 +163,8 @@ export type SqliteBackupResult = {
   integrity: "ok"
   userVersion: number
   tables: string[]
+  migrationJournal: Array<{ table: string; rows: number }>
+  foreignKeys: "ok"
 }
 
 export async function discoverStorage(root: string): Promise<StorageInventory> {
@@ -119,12 +219,21 @@ export async function backupSqlite(input: {
   destination: string
   open: (path: string) => SqliteConnection
 }): Promise<SqliteBackupResult> {
+  if (!isAbsolute(input.destination)) throw new Error("Backup destination must be absolute")
   if (await exists(input.destination)) throw new Error(`Backup destination already exists: ${input.destination}`)
   await mkdir(dirname(input.destination), { recursive: true })
 
   try {
+    const source = inspectSqlite(input.source)
     input.source.exec(`VACUUM INTO '${sqlString(input.destination)}'`)
     const result = verifySqlite(input.destination, input.open)
+    if (
+      source.userVersion !== result.userVersion ||
+      source.tables.join("\u0000") !== result.tables.join("\u0000") ||
+      JSON.stringify(source.migrationJournal) !== JSON.stringify(result.migrationJournal)
+    ) {
+      throw new Error("SQLite backup schema or migration journal mismatch")
+    }
     const info = await stat(input.destination)
     return { ...result, path: input.destination, bytes: info.size }
   } catch (error) {
@@ -251,16 +360,34 @@ async function hashFile(file: string) {
 function verifySqlite(path: string, openDatabase: (path: string) => SqliteConnection) {
   const database = openDatabase(path)
   try {
-    const integrity = firstValue(database.prepare("PRAGMA integrity_check").get())
-    if (integrity !== "ok") throw new Error(`SQLite integrity check failed: ${integrity}`)
-    const userVersion = Number(firstValue(database.prepare("PRAGMA user_version").get()))
-    const tables = database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-      .all()
-      .flatMap((row) => (isRecord(row) && typeof row.name === "string" ? [row.name] : []))
-    return { integrity: "ok" as const, userVersion, tables }
+    return inspectSqlite(database)
   } finally {
     database.close()
+  }
+}
+
+function inspectSqlite(database: SqliteConnection) {
+  const integrity = firstValue(database.prepare("PRAGMA integrity_check").get())
+  if (integrity !== "ok") throw new Error(`SQLite integrity check failed: ${integrity}`)
+  if (database.prepare("PRAGMA foreign_key_check").all().length) throw new Error("SQLite foreign key check failed")
+  const userVersion = Number(firstValue(database.prepare("PRAGMA user_version").get()))
+  const tables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    .all()
+    .flatMap((row) => (isRecord(row) && typeof row.name === "string" ? [row.name] : []))
+  const migrationJournal = tables
+    .filter((table) => /migration|drizzle/i.test(table))
+    .map((table) => ({
+      table,
+      rows: database.prepare(`SELECT count(*) AS count FROM "${table.replaceAll('"', '""')}"`).get(),
+    }))
+    .map((entry) => ({ table: entry.table, rows: Number(firstValue(entry.rows)) }))
+  return {
+    integrity: "ok" as const,
+    userVersion,
+    tables,
+    migrationJournal,
+    foreignKeys: "ok" as const,
   }
 }
 

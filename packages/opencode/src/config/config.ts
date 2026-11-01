@@ -6,7 +6,6 @@ import { pathToFileURL } from "url"
 import os from "os"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
-import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -138,13 +137,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
 export const use = serviceUse(Service)
 
 function globalConfigFile() {
-  const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
-    path.join(Global.Path.config, file),
-  )
+  const candidates = ConfigPaths.globalConfigFiles()
   for (const file of candidates) {
     if (existsSync(file)) return file
   }
-  return candidates[0]
+  return path.join(global.config, "lato.jsonc")
 }
 
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
@@ -242,11 +239,6 @@ const layer = Layer.effect(
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
-      if (!data.$schema) {
-        data.$schema = "https://opencode.ai/config.json"
-        const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
-      }
       return data
     })
 
@@ -259,34 +251,26 @@ const layer = Layer.effect(
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
       let result: Info = {}
-      // Seed the default global config with the schema for editor completion, but avoid writing when the user
-      // explicitly routes config through env-provided paths or content.
-      if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
-        const file = globalConfigFile()
-        if (!existsSync(file)) {
-          yield* fs
-            .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
-            .pipe(Effect.catch(() => Effect.void))
-        }
-      }
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
-
-      const legacy = path.join(Global.Path.config, "config")
+      const global = Global.make()
+      const legacy = path.join(global.legacyConfig, "config")
       if (existsSync(legacy)) {
         yield* Effect.promise(() =>
           import(pathToFileURL(legacy).href, { with: { type: "toml" } })
-            .then(async (mod) => {
+            .then((mod) => {
               const { provider, model, ...rest } = mod.default
               if (provider && model) result.model = `${provider}/${model}`
-              result["$schema"] = "https://opencode.ai/config.json"
               result = mergeConfig(result, rest)
-              await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
-              await fsNode.unlink(legacy)
             })
             .catch(() => {}),
         )
+      }
+
+      for (const file of ["config.json", "opencode.json", "opencode.jsonc"]) {
+        result = mergeConfig(result, yield* loadFile(path.join(global.legacyConfig, file), env))
+      }
+
+      for (const file of ["config.json", "opencode.json", "opencode.jsonc", "lato.json", "lato.jsonc"]) {
+        result = mergeConfig(result, yield* loadFile(path.join(global.config, file), env))
       }
 
       return result
@@ -410,11 +394,20 @@ const layer = Layer.effect(
         }
 
         const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
-        yield* merge(Global.Path.config, global, "global")
+        yield* merge(Global.make().config, global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
           yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
           yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+        }
+
+        const latoConfig = Flag.LATO_CONFIG
+        if (latoConfig) {
+          if (!existsSync(latoConfig)) {
+            yield* Effect.die(new Error(`LATO_CONFIG file not found: ${latoConfig}`))
+          }
+          yield* merge(latoConfig, yield* loadFile(latoConfig, authEnv))
+          yield* Effect.logDebug("loaded custom Lato config", { path: latoConfig })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
@@ -436,8 +429,14 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-            for (const file of ["opencode.json", "opencode.jsonc"]) {
+          if (dir.endsWith(".opencode") || dir.endsWith(".lato") || dir === Flag.OPENCODE_CONFIG_DIR) {
+            const files =
+              dir === Flag.OPENCODE_CONFIG_DIR
+                ? ["opencode.json", "opencode.jsonc"]
+                : dir.endsWith(".lato")
+                  ? ["lato.json", "lato.jsonc"]
+                  : ["opencode.json", "opencode.jsonc"]
+            for (const file of files) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
@@ -447,28 +446,30 @@ const layer = Layer.effect(
             }
           }
 
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
+          if (dir !== Global.Path.legacyConfig) yield* ensureGitignore(dir).pipe(Effect.orDie)
 
-          const dep = yield* npmSvc
-            .install(dir, {
-              add: [
-                {
-                  name: "@opencode-ai/plugin",
-                  version: InstallationLocal ? undefined : InstallationVersion,
-                },
-              ],
-            })
-            .pipe(
-              Effect.exit,
-              Effect.tap((exit) =>
-                Exit.isFailure(exit)
-                  ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
-                  : Effect.void,
-              ),
-              Effect.asVoid,
-              Effect.forkDetach,
-            )
-          deps.push(dep)
+          if (dir !== Global.Path.legacyConfig) {
+            const dep = yield* npmSvc
+              .install(dir, {
+                add: [
+                  {
+                    name: "@opencode-ai/plugin",
+                    version: InstallationLocal ? undefined : InstallationVersion,
+                  },
+                ],
+              })
+              .pipe(
+                Effect.exit,
+                Effect.tap((exit) =>
+                  Exit.isFailure(exit)
+                    ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
+                    : Effect.void,
+                ),
+                Effect.asVoid,
+                Effect.forkDetach,
+              )
+            deps.push(dep)
+          }
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
@@ -479,14 +480,24 @@ const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        if (process.env.OPENCODE_CONFIG_CONTENT) {
+        if (Flag.OPENCODE_CONFIG_CONTENT) {
           const source = "OPENCODE_CONFIG_CONTENT"
-          const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+          const next = yield* loadConfig(Flag.OPENCODE_CONFIG_CONTENT, {
             dir: ctx.directory,
             source,
           })
           yield* merge(source, next, "local")
           yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+        }
+
+        if (Flag.LATO_CONFIG_CONTENT) {
+          const source = "LATO_CONFIG_CONTENT"
+          const next = yield* loadConfig(Flag.LATO_CONFIG_CONTENT, {
+            dir: ctx.directory,
+            source,
+          })
+          yield* merge(source, next, "local")
+          yield* Effect.logDebug("loaded custom config from LATO_CONFIG_CONTENT")
         }
 
         const activeAccount = Option.getOrUndefined(
@@ -637,10 +648,13 @@ const layer = Layer.effect(
 
     const update = Effect.fn("Config.update")(function* (config: Info) {
       const dir = yield* InstanceState.directory
-      const file = path.join(dir, "config.json")
+      const candidates = ConfigPaths.projectConfigFiles(dir)
+      const found = yield* Effect.forEach(candidates, (candidate) => fs.existsSafe(candidate))
+      const file = candidates[found.findIndex(Boolean)] ?? path.join(dir, "lato.jsonc")
       const existing = yield* loadFile(file)
       const text = yield* readConfigFile(file)
-      const original = text ? ConfigParse.jsonc(text, file) : writable(existing)
+      const original = text ? ConfigParse.jsonc(text, file) : { $schema: "https://opencode.ai/config.json" }
+      yield* fs.ensureDir(path.dirname(file)).pipe(Effect.orDie)
       yield* fs
         .writeFileString(
           file,
@@ -654,9 +668,10 @@ const layer = Layer.effect(
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
-      const file = globalConfigFile()
+      const file = Flag.LATO_CONFIG ?? Flag.OPENCODE_CONFIG ?? globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
+      yield* fs.ensureDir(path.dirname(file)).pipe(Effect.orDie)
 
       let next: Info
       let changed: boolean

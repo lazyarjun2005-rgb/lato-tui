@@ -147,7 +147,7 @@ jobs:
           fi
 
           for name in opencode-darwin-arm64 opencode-darwin-x64 opencode-darwin-x64-baseline; do
-            file="packages/opencode/dist/$name/bin/opencode"
+            file="packages/opencode/dist/$name/bin/lato"
             chmod +x "$file"
             codesign \
               --force \
@@ -161,7 +161,7 @@ jobs:
           done
 
       - name: Smoke test signed binary
-        run: ./packages/opencode/dist/opencode-darwin-arm64/bin/opencode --version
+        run: ./packages/opencode/dist/opencode-darwin-arm64/bin/lato --version
 
       - name: Repack macOS CLI archives
         working-directory: packages/opencode/dist
@@ -234,9 +234,9 @@ jobs:
           signing-account-name: ${{ env.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
           files: |
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe
-            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\lato.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\lato.exe
+            ${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\lato.exe
           exclude-environment-credential: true
           exclude-workload-identity-credential: true
           exclude-managed-identity-credential: true
@@ -252,9 +252,9 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\opencode.exe",
-            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\opencode.exe"
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-arm64\bin\lato.exe",
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64\bin\lato.exe",
+            "${{ github.workspace }}\packages\opencode\dist\opencode-windows-x64-baseline\bin\lato.exe"
           )
 
           foreach ($file in $files) {

@@ -17,7 +17,7 @@ import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 import { Global } from "@opencode-ai/core/global"
-import { cliPreferenceState, cliScriptName } from "../identity"
+import { cliPreferenceState } from "../identity"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -292,7 +292,7 @@ export const TuiThreadCommand = cmd({
               return [tui, server]
             },
             config,
-            state: cliPreferenceState(cliScriptName(), Global.Path.state),
+            state: cliPreferenceState(Global.Path.state),
             pluginHost: createLegacyTuiPluginHost(),
             directory: cwd,
             fetch: transport.fetch,

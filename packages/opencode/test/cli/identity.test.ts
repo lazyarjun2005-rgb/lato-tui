@@ -11,41 +11,38 @@ afterEach(async () => {
 })
 
 describe("CLI script identity", () => {
-  test("uses Lato for source and Lato invocations", () => {
-    expect(cliScriptName(["/usr/bin/bun", "/workspace/src/index.ts"])).toBe("lato")
-    expect(cliScriptName(["/opt/lato/bin/lato", "pr", "42"])).toBe("lato")
+  test("always uses Lato", () => {
+    expect(cliScriptName()).toBe("lato")
   })
 
-  test("preserves the legacy OpenCode display name when invoked that way", () => {
-    expect(cliScriptName(["/usr/bin/node", "/home/user/.local/bin/opencode", "completion"])).toBe("opencode")
-    expect(cliScriptName(["/opt/opencode/bin/opencode", "--help"])).toBe("opencode")
-    expect(cliScriptName(["C:\\Program Files\\OpenCode\\opencode.exe", "--help"])).toBe("opencode")
-  })
-
-  test("does not treat an unrelated runtime as the legacy executable", () => {
-    expect(cliScriptName(["/usr/bin/node", "/tmp/runner.js"], "/usr/bin/node")).toBe("lato")
-  })
-
-  test("isolates Lato TUI preferences from the compatibility state path", () => {
-    expect(cliPreferenceState("lato", "/home/user/.local/state/opencode")).toBe("/home/user/.local/state/lato")
-    expect(cliPreferenceState("opencode", "/home/user/.local/state/opencode")).toBe("/home/user/.local/state/opencode")
-    expect(cliPreferenceState("lato", "C:\\Users\\user\\AppData\\Local\\opencode")).toBe(
+  test("derives the Lato preference path from compatibility state", () => {
+    expect(cliPreferenceState("/home/user/.local/state/opencode")).toBe("/home/user/.local/state/lato")
+    expect(cliPreferenceState("C:\\Users\\user\\AppData\\Local\\opencode")).toBe(
       "C:\\Users\\user\\AppData\\Local\\lato",
     )
-    expect(cliPreferenceState("lato", "/Users/user/Library/Application Support/opencode")).toBe(
+    expect(cliPreferenceState("/Users/user/Library/Application Support/opencode")).toBe(
       "/Users/user/Library/Application Support/lato",
     )
+    expect(cliPreferenceState("/home/user/.local/state/lato")).toBe("/home/user/.local/state/lato")
+    expect(cliPreferenceState("C:\\Users\\user\\AppData\\Local\\lato")).toBe("C:\\Users\\user\\AppData\\Local\\lato")
   })
 
-  test("keeps synthetic Lato and OpenCode preference files separate", async () => {
+  test("keeps compatibility preference files untouched", async () => {
     const root = await mkdtemp(join(tmpdir(), "lato-identity-test-"))
     roots.push(root)
     const compatibilityState = join(root, "opencode")
-    const latoState = cliPreferenceState("lato", compatibilityState)
+    const latoState = cliPreferenceState(compatibilityState)
     await mkdir(latoState, { recursive: true })
-    await writeFile(join(latoState, "kv.json"), '{"theme":"lato-test"}')
+    await mkdir(compatibilityState, { recursive: true })
+    const latoFile = join(latoState, "kv.json")
+    const opencodeFile = join(compatibilityState, "kv.json")
+    await writeFile(latoFile, '{"theme":"lato-test"}')
+    await writeFile(opencodeFile, '{"theme":"opencode-test"}')
 
-    expect(JSON.parse(await readFile(join(latoState, "kv.json"), "utf8"))).toEqual({ theme: "lato-test" })
-    await expect(readFile(join(compatibilityState, "kv.json"), "utf8")).rejects.toThrow()
+    expect(JSON.parse(await readFile(latoFile, "utf8"))).toEqual({ theme: "lato-test" })
+    expect(JSON.parse(await readFile(opencodeFile, "utf8"))).toEqual({ theme: "opencode-test" })
+
+    await writeFile(latoFile, '{"theme":"lato-updated"}')
+    expect(JSON.parse(await readFile(opencodeFile, "utf8"))).toEqual({ theme: "opencode-test" })
   })
 })

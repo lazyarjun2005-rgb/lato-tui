@@ -205,16 +205,14 @@ it.instance("migrates tui-specific keys from opencode.json when tui.json does no
       expect(config.theme).toBe("migrated-theme")
       expect(config.scroll_speed).toBe(5)
       expect(config.keybinds.get("app.exit")?.[0]?.key).toBe("ctrl+q")
-      expect(JSON.parse(yield* fs.readFileString(path.join(test.directory, "tui.json")))).toMatchObject({
-        theme: "migrated-theme",
-        scroll_speed: 5,
-      })
       const server = JSON.parse(yield* fs.readFileString(source))
-      expect(server.theme).toBeUndefined()
-      expect(server.keybinds).toBeUndefined()
-      expect(server.tui).toBeUndefined()
-      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.json.tui-migration.bak"))).toBe(true)
-      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
+      expect(server).toMatchObject({
+        theme: "migrated-theme",
+        tui: { scroll_speed: 5 },
+        keybinds: { app_exit: "ctrl+q" },
+      })
+      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.json.tui-migration.bak"))).toBe(false)
+      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(false)
     }),
   ),
 )
@@ -233,11 +231,8 @@ it.instance("migrates project legacy tui keys even when global tui.json already 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("project-migrated")
       expect(config.scroll_speed).toBe(2)
-      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
-
       const server = JSON.parse(yield* fs.readFileString(path.join(test.directory, "opencode.json")))
-      expect(server.theme).toBeUndefined()
-      expect(server.tui).toBeUndefined()
+      expect(server).toMatchObject({ theme: "project-migrated", tui: { scroll_speed: 2 } })
     }),
   ),
 )
@@ -256,9 +251,7 @@ it.instance("drops unknown legacy tui keys during migration", () =>
       expect(config.theme).toBe("migrated-theme")
       expect(config.scroll_speed).toBe(2)
 
-      const migrated = JSON.parse(yield* fs.readFileString(path.join(test.directory, "tui.json")))
-      expect(migrated.scroll_speed).toBe(2)
-      expect(migrated.foo).toBeUndefined()
+      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(false)
     }),
   ),
 )
@@ -322,7 +315,7 @@ it.instance("continues loading tui config when legacy source cannot be stripped"
           Effect.gen(function* () {
             const config = yield* getTuiConfig(test.directory)
             expect(config.theme).toBe("readonly-theme")
-            expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
+            expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(false)
 
             const server = JSON.parse(yield* fs.readFileString(source))
             expect(server.theme).toBe("readonly-theme")
@@ -351,11 +344,8 @@ it.instance("migration backup preserves JSONC comments", () =>
       )
 
       yield* getTuiConfig(test.directory)
-      const backup = yield* fs.readFileString(path.join(test.directory, "opencode.jsonc.tui-migration.bak"))
-      expect(backup).toContain("// top-level comment")
-      expect(backup).toContain("// nested comment")
-      expect(backup).toContain('"theme": "jsonc-theme"')
-      expect(backup).toContain('"scroll_speed": 1.5')
+      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.jsonc.tui-migration.bak"))).toBe(false)
+      expect(yield* fs.readFileString(path.join(test.directory, "opencode.jsonc"))).toContain("// top-level comment")
     }),
   ),
 )
@@ -372,8 +362,8 @@ it.instance("migrates legacy tui keys across multiple opencode.json levels", () 
 
       const config = yield* getTuiConfig(nested)
       expect(config.theme).toBe("nested-theme")
-      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
-      expect(yield* fs.existsSafe(path.join(nested, "tui.json"))).toBe(true)
+      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(false)
+      expect(yield* fs.existsSafe(path.join(nested, "tui.json"))).toBe(false)
     }),
   ),
 )

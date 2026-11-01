@@ -1,6 +1,6 @@
 # Lato Runtime Identity And Preference Isolation
 
-Status: Phase 3.6 implementation, complete with limitations
+Status: Historical Phase 3.6 implementation. Superseded by Phase 4.1: CLI identity is now unconditionally Lato, the OpenCode application entry point is removed, and `cliPreferenceState(state)` always selects the Lato preference path. The compatibility details below describe the Phase 3.6 state and are retained for history.
 
 ## 1. Root Cause
 

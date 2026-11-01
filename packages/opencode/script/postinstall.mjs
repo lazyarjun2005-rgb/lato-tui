@@ -9,6 +9,7 @@ import { fileURLToPath } from "url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
+const { nativeTargetName } = require("../bin/native-target.cjs")
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"))
 
 const platformMap = {
@@ -24,9 +25,8 @@ const archMap = {
 
 const platform = platformMap[os.platform()] ?? os.platform()
 const arch = archMap[os.arch()] ?? os.arch()
-const base = `opencode-${platform}-${arch}`
-const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
-const targetBinary = path.join(__dirname, "bin", "opencode.exe")
+const sourceBinary = platform === "windows" ? "lato.exe" : "lato"
+const targetBinary = path.join(__dirname, "bin", platform === "windows" ? "lato.exe" : "lato")
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -98,22 +98,29 @@ function packageNames() {
 
   if (platform === "linux") {
     if (isMusl()) {
-      if (arch === "x64")
-        return baseline
-          ? [`${base}-baseline-musl`, `${base}-musl`, `${base}-baseline`, base]
-          : [`${base}-musl`, `${base}-baseline-musl`, base, `${base}-baseline`]
-      return [`${base}-musl`, base]
+      if (arch === "x64" && baseline)
+        return [
+          nativeTargetName({ platform, arch, baseline: true, musl: true }),
+          nativeTargetName({ platform, arch, musl: true }),
+          nativeTargetName({ platform, arch, baseline: true }),
+          nativeTargetName({ platform, arch }),
+        ]
+      return [nativeTargetName({ platform, arch, musl: true }), nativeTargetName({ platform, arch })]
     }
 
-    if (arch === "x64")
-      return baseline
-        ? [`${base}-baseline`, base, `${base}-baseline-musl`, `${base}-musl`]
-        : [base, `${base}-baseline`, `${base}-musl`, `${base}-baseline-musl`]
-    return [base, `${base}-musl`]
+    if (arch === "x64" && baseline)
+      return [
+        nativeTargetName({ platform, arch, baseline: true }),
+        nativeTargetName({ platform, arch }),
+        nativeTargetName({ platform, arch, baseline: true, musl: true }),
+        nativeTargetName({ platform, arch, musl: true }),
+      ]
+    return [nativeTargetName({ platform, arch }), nativeTargetName({ platform, arch, baseline: true })]
   }
 
-  if (arch === "x64") return baseline ? [`${base}-baseline`, base] : [base, `${base}-baseline`]
-  return [base]
+  if (arch === "x64" && baseline)
+    return [nativeTargetName({ platform, arch, baseline: true }), nativeTargetName({ platform, arch })]
+  return [nativeTargetName({ platform, arch }), nativeTargetName({ platform, arch, baseline: true })]
 }
 
 function resolveBinary(name) {
@@ -127,7 +134,7 @@ function installPackage(name) {
   const version = packageJson.optionalDependencies?.[name]
   if (!version) return
 
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-install-"))
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "lato-install-"))
   try {
     const result = childProcess.spawnSync(
       "npm",
@@ -175,7 +182,7 @@ function main() {
   }
 
   throw new Error(
-    `It seems your package manager failed to install the right opencode CLI package. Try manually installing ${packageNames()
+    `It seems your package manager failed to install the right Lato CLI package. Try manually installing ${packageNames()
       .map((name) => JSON.stringify(name))
       .join(" or ")}.`,
   )

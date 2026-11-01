@@ -7,8 +7,11 @@ import { tmpdir } from "node:os"
 import {
   backupSqlite,
   discoverStorage,
+  manifestFromPreview,
   previewStorage,
+  resolveStorageRoots,
   type SqliteConnection,
+  validateMigrationManifest,
 } from "../../src/storage/migration-prototype"
 
 const roots: string[] = []
@@ -64,6 +67,34 @@ async function tree(root: string) {
 }
 
 describe("storage discovery and preview", () => {
+  test("resolves platform storage roots without reading the filesystem", () => {
+    expect(resolveStorageRoots({ platform: "linux", home: "/home/test", env: {} })).toEqual({
+      config: "/home/test/.config/lato",
+      data: "/home/test/.local/share/lato",
+      state: "/home/test/.local/state/lato",
+      cache: "/home/test/.cache/lato",
+      logs: "/home/test/.local/state/lato/log",
+      tmp: "/tmp/lato",
+    })
+    expect(resolveStorageRoots({ platform: "darwin", home: "/Users/test", env: {} }).config).toBe(
+      "/Users/test/Library/Application Support/Lato",
+    )
+    expect(
+      resolveStorageRoots({
+        platform: "win32",
+        home: "C:/Users/test",
+        env: { APPDATA: "C:/Users/test/AppData/Roaming", LOCALAPPDATA: "C:/Users/test/AppData/Local", TEMP: "C:/Temp" },
+      }),
+    ).toEqual({
+      config: "C:/Users/test/AppData/Roaming/Lato",
+      data: "C:/Users/test/AppData/Roaming/Lato",
+      state: "C:/Users/test/AppData/Local/Lato/state",
+      cache: "C:/Users/test/AppData/Local/Lato/cache",
+      logs: "C:/Users/test/AppData/Local/Lato/logs",
+      tmp: "C:/Temp/Lato",
+    })
+  })
+
   test("discovers synthetic storage without changing its source", async () => {
     const source = await createFixture()
     const before = await tree(source)
@@ -105,6 +136,17 @@ describe("storage discovery and preview", () => {
     expect(await tree(source)).toEqual(beforeSource)
     expect(await tree(destination)).toEqual(beforeDestination)
   })
+
+  test("creates and validates a versioned preview manifest", async () => {
+    const source = await createFixture()
+    const preview = await previewStorage(source, join(await root(), "destination"))
+    const manifest = manifestFromPreview(preview, 123)
+
+    expect(manifest).toMatchObject({ version: 1, kind: "lato-storage-migration", status: "preview", createdAt: 123 })
+    expect(manifest.entries.some((entry) => entry.relativePath === "auth.json" && entry.action === "copy")).toBe(true)
+    expect(validateMigrationManifest(manifest)).toEqual(manifest)
+    expect(() => validateMigrationManifest({ ...manifest, version: 2 })).toThrow()
+  })
 })
 
 describe("SQLite backup prototype", () => {
@@ -123,9 +165,29 @@ describe("SQLite backup prototype", () => {
     })
     const backup = new Database(backupPath)
     expect(result.integrity).toBe("ok")
+    expect(result.foreignKeys).toBe("ok")
+    expect(result.migrationJournal).toEqual([])
     expect(backup.query("SELECT marker FROM session").get()).toEqual({ marker: "LATO-SYNTHETIC" })
     expect(source.query("SELECT count(*) AS count FROM session").get()).toEqual({ count: 1 })
     backup.close(false)
+    source.close(false)
+  })
+
+  test("preserves migration journal metadata", async () => {
+    const directory = await root()
+    const sourcePath = join(directory, "source-journal.db")
+    const backupPath = join(directory, "backup-journal.db")
+    const source = new Database(sourcePath)
+    source.exec(
+      "CREATE TABLE drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL); INSERT INTO drizzle_migrations VALUES (1, 'synthetic');",
+    )
+
+    const result = await backupSqlite({
+      source: bunConnection(source),
+      destination: backupPath,
+      open: (path) => bunConnection(new Database(path)),
+    })
+    expect(result.migrationJournal).toEqual([{ table: "drizzle_migrations", rows: 1 }])
     source.close(false)
   })
 
@@ -144,6 +206,7 @@ describe("SQLite backup prototype", () => {
     })
     const backup = new DatabaseSync(backupPath)
     expect(result.integrity).toBe("ok")
+    expect(result.foreignKeys).toBe("ok")
     expect(backup.prepare("SELECT marker FROM session").get()).toEqual({ marker: "NODE-SYNTHETIC" })
     expect(source.prepare("SELECT count(*) AS count FROM session").get()).toEqual({ count: 1 })
     backup.close()
@@ -166,6 +229,21 @@ describe("SQLite backup prototype", () => {
       }),
     ).rejects.toThrow("already exists")
     expect(await readFile(backupPath, "utf8")).toBe("existing")
+    source.close(false)
+  })
+
+  test("rejects relative backup destinations", async () => {
+    const directory = await root()
+    const source = new Database(join(directory, "source.db"))
+    source.exec("CREATE TABLE value (value TEXT);")
+
+    await expect(
+      backupSqlite({
+        source: bunConnection(source),
+        destination: "relative.db",
+        open: (path) => bunConnection(new Database(path)),
+      }),
+    ).rejects.toThrow("absolute")
     source.close(false)
   })
 

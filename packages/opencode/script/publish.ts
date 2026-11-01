@@ -35,28 +35,17 @@ await $`mkdir -p ./dist/${pkg.name}`
 await $`mkdir -p ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
-await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
-  [
-    `echo "Error: ${pkg.name}-ai's postinstall script was not run." >&2`,
-    'echo "" >&2',
-    'echo "This occurs when using --ignore-scripts during installation, or when using a" >&2',
-    'echo "package manager like pnpm that does not run postinstall scripts by default." >&2',
-    'echo "" >&2',
-    'echo "To fix this, run the postinstall script manually:" >&2',
-    `echo "  cd node_modules/${pkg.name}-ai && node postinstall.mjs" >&2`,
-    'echo "" >&2',
-    `echo "Or reinstall ${pkg.name}-ai without the --ignore-scripts flag." >&2`,
-    "exit 1",
-    "",
-  ].join("\n"),
-)
+await Bun.file(`./dist/${pkg.name}/bin/run.cjs`).write(await Bun.file("./bin/run.cjs").text())
+await Bun.file(`./dist/${pkg.name}/bin/lato.cjs`).write(await Bun.file("./bin/lato.cjs").text())
+await Bun.file(`./dist/${pkg.name}/bin/lato-cli.cjs`).write(await Bun.file("./bin/lato-cli.cjs").text())
+await Bun.file(`./dist/${pkg.name}/bin/native-target.cjs`).write(await Bun.file("./bin/native-target.cjs").text())
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}.exe`,
+        "lato-cli": "./bin/lato-cli.cjs",
       },
       scripts: {
         postinstall: "node ./postinstall.mjs",
@@ -119,7 +108,7 @@ if (!Script.preview) {
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    '  install -Dm755 ./lato "${pkgdir}/usr/bin/lato"',
     "}",
     "",
   ].join("\n")
@@ -162,7 +151,7 @@ if (!Script.preview) {
     `      sha256 "${macX64Sha}"`,
     "",
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "lato"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm?",
@@ -170,7 +159,7 @@ if (!Script.preview) {
     `      sha256 "${macArm64Sha}"`,
     "",
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "lato"',
     "      end",
     "    end",
     "  end",
@@ -180,14 +169,14 @@ if (!Script.preview) {
     `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
     `      sha256 "${x64Sha}"`,
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "lato"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
     `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
     `      sha256 "${arm64Sha}"`,
     "      def install",
-    '        bin.install "opencode"',
+    '        bin.install "lato"',
     "      end",
     "    end",
     "  end",

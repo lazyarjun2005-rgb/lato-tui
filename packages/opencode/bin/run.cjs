@@ -1,0 +1,222 @@
+#!/usr/bin/env node
+
+const childProcess = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const os = require("os")
+const { nativeTargetName } = require("./native-target.cjs")
+
+const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
+
+function launch(target) {
+  const child = childProcess.spawn(target, process.argv.slice(2), {
+    stdio: "inherit",
+  })
+
+  child.on("error", (error) => {
+    console.error(error.message)
+    process.exit(1)
+  })
+
+  const forwarders = {}
+  for (const signal of forwardedSignals) {
+    forwarders[signal] = () => {
+      try {
+        child.kill(signal)
+      } catch {
+        // The child may have already exited.
+      }
+    }
+    process.on(signal, forwarders[signal])
+  }
+
+  child.on("exit", (code, signal) => {
+    for (const forwardedSignal of forwardedSignals) {
+      process.removeListener(forwardedSignal, forwarders[forwardedSignal])
+    }
+
+    if (signal) {
+      process.kill(process.pid, signal)
+      return
+    }
+
+    process.exit(typeof code === "number" ? code : 0)
+  })
+}
+
+function main() {
+  const envPath = process.env.LATO_BIN_PATH
+
+  const scriptPath = fs.realpathSync(__filename)
+  const scriptDir = path.dirname(scriptPath)
+
+  //
+  const cached = path.join(scriptDir, ".lato")
+  const sibling = path.join(scriptDir, os.platform() === "win32" ? "lato.exe" : "lato")
+
+  const platformMap = {
+    darwin: "darwin",
+    linux: "linux",
+    win32: "windows",
+  }
+  const archMap = {
+    x64: "x64",
+    arm64: "arm64",
+    arm: "arm",
+  }
+
+  let platform = platformMap[os.platform()]
+  if (!platform) {
+    platform = os.platform()
+  }
+  let arch = archMap[os.arch()]
+  if (!arch) {
+    arch = os.arch()
+  }
+  const binary = platform === "windows" ? "lato.exe" : "lato"
+
+  function supportsAvx2() {
+    if (arch !== "x64") return false
+
+    if (platform === "linux") {
+      try {
+        return /(^|\s)avx2(\s|$)/i.test(fs.readFileSync("/proc/cpuinfo", "utf8"))
+      } catch {
+        return false
+      }
+    }
+
+    if (platform === "darwin") {
+      try {
+        const result = childProcess.spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], {
+          encoding: "utf8",
+          timeout: 1500,
+        })
+        if (result.status !== 0) return false
+        return (result.stdout || "").trim() === "1"
+      } catch {
+        return false
+      }
+    }
+
+    if (platform === "windows") {
+      const cmd =
+        '(Add-Type -MemberDefinition "[DllImport(""kernel32.dll"")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)'
+
+      for (const exe of ["powershell.exe", "pwsh.exe", "pwsh", "powershell"]) {
+        try {
+          const result = childProcess.spawnSync(exe, ["-NoProfile", "-NonInteractive", "-Command", cmd], {
+            encoding: "utf8",
+            timeout: 3000,
+            windowsHide: true,
+          })
+          if (result.status !== 0) continue
+          const out = (result.stdout || "").trim().toLowerCase()
+          if (out === "true" || out === "1") return true
+          if (out === "false" || out === "0") return false
+        } catch {
+          continue
+        }
+      }
+
+      return false
+    }
+
+    return false
+  }
+
+  const names = (() => {
+    const avx2 = supportsAvx2()
+    const baseline = arch === "x64" && !avx2
+
+    if (platform === "linux") {
+      const musl = (() => {
+        try {
+          if (fs.existsSync("/etc/alpine-release")) return true
+        } catch {
+          // ignore
+        }
+
+        try {
+          const result = childProcess.spawnSync("ldd", ["--version"], { encoding: "utf8" })
+          const text = ((result.stdout || "") + (result.stderr || "")).toLowerCase()
+          if (text.includes("musl")) return true
+        } catch {
+          // ignore
+        }
+
+        return false
+      })()
+
+      if (musl) {
+        if (arch === "x64" && baseline)
+          return [
+            nativeTargetName({ platform, arch, baseline: true, musl: true }),
+            nativeTargetName({ platform, arch, musl: true }),
+            nativeTargetName({ platform, arch, baseline: true }),
+            nativeTargetName({ platform, arch }),
+          ]
+        return [nativeTargetName({ platform, arch, musl: true }), nativeTargetName({ platform, arch })]
+      }
+
+      if (arch === "x64" && baseline)
+        return [
+          nativeTargetName({ platform, arch, baseline: true }),
+          nativeTargetName({ platform, arch }),
+          nativeTargetName({ platform, arch, baseline: true, musl: true }),
+          nativeTargetName({ platform, arch, musl: true }),
+        ]
+      return [nativeTargetName({ platform, arch }), nativeTargetName({ platform, arch, baseline: true })]
+    }
+
+    if (arch === "x64" && baseline)
+      return [nativeTargetName({ platform, arch, baseline: true }), nativeTargetName({ platform, arch })]
+    return [nativeTargetName({ platform, arch }), nativeTargetName({ platform, arch, baseline: true })]
+  })()
+
+  function findLocalBinary(startDir) {
+    const dist = path.join(startDir, "..", "dist")
+    for (const name of names) {
+      const candidate = path.join(dist, name, "bin", binary)
+      if (fs.existsSync(candidate)) return candidate
+    }
+  }
+
+  function findBinary(startDir) {
+    let current = startDir
+    for (;;) {
+      const modules = path.join(current, "node_modules")
+      if (fs.existsSync(modules)) {
+        for (const name of names) {
+          const candidate = path.join(modules, name, "bin", binary)
+          if (fs.existsSync(candidate)) return candidate
+        }
+      }
+      const parent = path.dirname(current)
+      if (parent === current) {
+        return
+      }
+      current = parent
+    }
+  }
+
+  const resolved =
+    envPath ||
+    (fs.existsSync(cached)
+      ? cached
+      : fs.existsSync(sibling)
+        ? sibling
+        : findLocalBinary(scriptDir) || findBinary(scriptDir))
+  if (!resolved) {
+    console.error(
+      `It seems that your package manager failed to install the right version of the Lato CLI for your platform. You can try manually installing ` +
+        names.map((n) => `"${n}"`).join(" or ") +
+        " package",
+    )
+    process.exit(1)
+  }
+
+  launch(resolved)
+}
+
+module.exports = { main }

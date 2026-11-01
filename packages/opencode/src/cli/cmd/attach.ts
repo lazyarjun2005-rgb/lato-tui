@@ -4,7 +4,7 @@ import { errorMessage } from "@opencode-ai/tui/util/error"
 import { validateSession } from "../tui/validate-session"
 import { ServerAuth } from "@/server/auth"
 import { Global } from "@opencode-ai/core/global"
-import { cliPreferenceState, cliScriptName } from "../identity"
+import { cliPreferenceState } from "../identity"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -136,7 +136,7 @@ export const AttachCommand = cmd({
       run({
         url: args.url,
         config,
-        state: cliPreferenceState(cliScriptName(), Global.Path.state),
+        state: cliPreferenceState(Global.Path.state),
         pluginHost: createLegacyTuiPluginHost(),
         args: {
           continue: args.continue,

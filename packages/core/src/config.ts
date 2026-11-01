@@ -7,6 +7,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
+import { Flag } from "./flag/flag"
 import { Location } from "./location"
 import { Policy } from "./policy"
 import { AbsolutePath } from "./schema"
@@ -139,7 +140,9 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    const names = ["opencode.json", "opencode.jsonc"]
+    const legacyNames = ["opencode.json", "opencode.jsonc"]
+    const latoNames = ["lato.json", "lato.jsonc"]
+    const globalLegacyNames = ["config.json", ...legacyNames]
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
@@ -161,7 +164,7 @@ const layer = Layer.effect(
       return new Document({ type: "document", path: filepath, info })
     })
 
-    const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
+    const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath, names: readonly string[]) {
       return [
         ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
           Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
@@ -170,37 +173,66 @@ const layer = Layer.effect(
       ]
     })
 
+    const legacyGlobalDirectory = AbsolutePath.make(global.legacyConfig)
     const globalDirectory = AbsolutePath.make(global.config)
-    const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
+    const locationIsGlobal = [global.config, global.legacyConfig].some(
+      (directory) => path.resolve(location.directory) === path.resolve(directory),
+    )
     // Read configuration once when this location opens. Later calls reuse these
     // values until the location is reopened.
     const discovered = locationIsGlobal
       ? []
       : yield* fs
           .up({
-            targets: [".opencode", ...names.toReversed()],
+            targets: [".opencode", ".lato", ...legacyNames.toReversed(), ...latoNames.toReversed()],
             start: location.directory,
             stop: location.project.directory,
           })
           .pipe(Effect.orDie)
-    const directories = [
-      globalDirectory,
+    const directorySources = [
+      { directory: legacyGlobalDirectory, names: globalLegacyNames },
+      { directory: globalDirectory, names: [...legacyNames, ...latoNames] },
       ...discovered
         .filter((item) => path.basename(item) === ".opencode")
         .toReversed()
-        .map((directory) => AbsolutePath.make(directory)),
-    ]
+        .map((directory) => ({ directory: AbsolutePath.make(directory), names: legacyNames })),
+      ...discovered
+        .filter((item) => path.basename(item) === ".lato")
+        .toReversed()
+        .map((directory) => ({ directory: AbsolutePath.make(directory), names: latoNames })),
+      ...(Flag.OPENCODE_CONFIG_DIR
+        ? [{ directory: AbsolutePath.make(Flag.OPENCODE_CONFIG_DIR), names: legacyNames }]
+        : []),
+    ].filter(
+      (source, index, sources) =>
+        sources.findIndex((candidate) => path.resolve(candidate.directory) === path.resolve(source.directory)) ===
+        index,
+    )
+    const directories = directorySources.map((source) => source.directory)
+    const globalDirectoryCount = directorySources.filter((source) =>
+      [global.config, global.legacyConfig].some(
+        (directory) => path.resolve(directory) === path.resolve(source.directory),
+      ),
+    ).length
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
-    const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
+    const directFile = (item: string, names: readonly string[]) =>
+      names.includes(path.basename(item)) && ![".opencode", ".lato"].includes(path.basename(path.dirname(item)))
+    const legacyDirectPaths = discovered.filter((item) => directFile(item, legacyNames)).toReversed()
+    const latoDirectPaths = discovered.filter((item) => directFile(item, latoNames)).toReversed()
+    const directPaths = [...legacyDirectPaths, ...latoDirectPaths]
     const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
       Effect.orDie,
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
-    const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+    const supplementary = yield* Effect.forEach(directorySources, (source) =>
+      loadDirectory(source.directory, source.names),
+    ).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
     // global config, project files, then `.opencode` files.
-    const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    const globalSupplementary = supplementary.slice(0, globalDirectoryCount).flat()
+    const projectSupplementary = supplementary.slice(globalDirectoryCount).flat()
+    const configs = [...globalSupplementary, ...direct, ...projectSupplementary]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

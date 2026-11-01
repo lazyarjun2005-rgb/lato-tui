@@ -7,7 +7,6 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
-import { migrateTuiConfig } from "./tui-migrate"
 import { resolveHostAttentionSoundPaths } from "./tui-host-attention"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@opencode-ai/tui/util/record"
@@ -146,9 +145,31 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       return yield* load(text, filepath)
     })
 
-  const mergeFile = (acc: Acc, file: string) =>
+  const loadLegacyFile = (filepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
-      const data = yield* loadFile(file)
+      const text = yield* afs.readFileStringSafe(filepath)
+      if (!text) return {} as Info
+      const data = ConfigParse.jsonc(text, filepath)
+      if (!isRecord(data)) return {} as Info
+      const legacy: Record<string, unknown> = {}
+      if ("theme" in data) legacy.theme = data.theme
+      if ("keybinds" in data) legacy.keybinds = data.keybinds
+      if (isRecord(data.tui)) Object.assign(legacy, data.tui)
+      if (!Object.keys(legacy).length) return {} as Info
+      const normalized = dropUnknownKeybinds(normalize(legacy))
+      return ConfigParse.schema(Info, normalized, filepath)
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("skipping invalid legacy tui config", {
+          path: filepath,
+          reason: FormatError(Cause.squash(cause)) ?? FormatUnknownError(Cause.squash(cause)),
+        }).pipe(Effect.as({} as Info)),
+      ),
+    )
+
+  const mergeFile = (acc: Acc, file: string, loader = loadFile) =>
+    Effect.gen(function* () {
+      const data = yield* loader(file)
       if (Object.keys(data).length) {
         appliedOrder += 1
         yield* Effect.logInfo("applying tui config", { path: file, order: appliedOrder })
@@ -168,11 +189,21 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       acc.plugin_origins = plugins
     })
 
+  const mergeLegacyFile = (acc: Acc, directory: string) =>
+    Effect.gen(function* () {
+      if (yield* afs.existsSafe(path.join(directory, "tui.json"))) return
+      for (const file of ["opencode.json", "opencode.jsonc"]) {
+        const source = path.join(directory, file)
+        if (yield* afs.existsSafe(source)) {
+          yield* mergeFile(acc, source, loadLegacyFile)
+          return
+        }
+      }
+    })
+
   // Every config dir we may read from: global config dir, any `.opencode`
   // folders between cwd and home, and OPENCODE_CONFIG_DIR.
   const directories = yield* ConfigPaths.directories(ctx.directory)
-  yield* Effect.promise(() => migrateTuiConfig({ directories, cwd: ctx.directory }))
-
   const projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : yield* ConfigPaths.files("tui", ctx.directory)
 
   const acc: Acc = {
@@ -180,9 +211,12 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     plugin_origins: [],
   }
 
-  // 1. Global tui config (lowest precedence).
-  for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
-    yield* mergeFile(acc, file)
+  // 1. Legacy and Lato global TUI config (lowest precedence).
+  for (const directory of unique([Global.Path.legacyConfig, Global.make().config])) {
+    for (const file of ConfigPaths.fileInDirectory(directory, "tui")) {
+      yield* mergeFile(acc, file)
+    }
+    yield* mergeLegacyFile(acc, directory)
   }
 
   // 2. Explicit OPENCODE_TUI_CONFIG override, if set.
@@ -196,17 +230,27 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   for (const file of projectFiles) {
     yield* mergeFile(acc, file)
   }
+  if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+    const legacyFiles = (yield* afs.up({
+      targets: ["opencode.json", "opencode.jsonc"],
+      start: ctx.directory,
+    })).toReversed()
+    for (const file of legacyFiles) yield* mergeLegacyFile(acc, path.dirname(file))
+  }
 
-  // 4. `.opencode` directories (and OPENCODE_CONFIG_DIR) discovered while
+  // 4. `.opencode`, `.lato`, and OPENCODE_CONFIG_DIR directories discovered while
   // walking up the tree. Also returned below so callers can install plugin
   // dependencies from each location.
-  const dirs = unique(directories).filter((dir) => dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR)
+  const dirs = unique(directories).filter(
+    (dir) => dir.endsWith(".opencode") || dir.endsWith(".lato") || dir === Flag.OPENCODE_CONFIG_DIR,
+  )
 
   for (const dir of dirs) {
-    if (!dir.endsWith(".opencode") && dir !== Flag.OPENCODE_CONFIG_DIR) continue
+    if (!dir.endsWith(".opencode") && !dir.endsWith(".lato") && dir !== Flag.OPENCODE_CONFIG_DIR) continue
     for (const file of ConfigPaths.fileInDirectory(dir, "tui")) {
       yield* mergeFile(acc, file)
     }
+    yield* mergeLegacyFile(acc, dir)
   }
 
   const result = TuiConfig.resolve(

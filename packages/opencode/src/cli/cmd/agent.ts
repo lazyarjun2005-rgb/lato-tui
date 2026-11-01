@@ -101,14 +101,14 @@ const AgentCreateCommand = effectCmd({
               {
                 label: "Global",
                 value: "global" as const,
-                hint: Global.Path.config,
+                hint: Global.make().config,
               },
             ],
           })
           if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
           scope = scopeResult
         }
-        targetPath = path.join(scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"), "agents")
+        targetPath = path.join(scope === "global" ? Global.make().config : path.join(ctx.worktree, ".lato"), "agents")
       }
 
       // Get description

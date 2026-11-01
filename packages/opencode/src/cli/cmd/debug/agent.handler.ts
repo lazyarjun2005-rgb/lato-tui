@@ -1,7 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EOL } from "os"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { basename } from "path"
 import { Cause, Effect } from "effect"
 import { Agent } from "../../../agent/agent"
 import { Provider } from "@/provider/provider"
@@ -31,9 +30,7 @@ const run = Effect.fn("Cli.debug.agent.body")(function* (
   const agentName = args.name
   const agent = yield* Agent.Service.use((svc) => svc.get(agentName))
   if (!agent) {
-    process.stderr.write(
-      `Agent ${agentName} not found, run '${basename(process.execPath)} agent list' to get an agent list` + EOL,
-    )
+    process.stderr.write(`Agent ${agentName} not found, run 'lato agent list' to get an agent list` + EOL)
     return yield* fail("", 1)
   }
   const availableTools = yield* getAvailableTools(agent)

@@ -31,7 +31,7 @@ export type PatchDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "opencode" | "tui") => string[]
+  files: (dir: string, name: "opencode" | "lato" | "tui") => string[]
 }
 
 export type PatchInput = {
@@ -330,23 +330,27 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
   }
 }
 
-function patchDir(input: PatchInput) {
-  if (input.global) return input.config ?? Global.Path.config
+async function patchDir(input: PatchInput) {
+  if (input.global) return input.config ?? Global.make().config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  return path.join(root, ".opencode")
+  const lato = path.join(root, ".lato")
+  const legacy = path.join(root, ".opencode")
+  if (await Filesystem.exists(lato)) return lato
+  if (await Filesystem.exists(legacy)) return legacy
+  return lato
 }
 
-function patchName(kind: Kind): "opencode" | "tui" {
-  if (kind === "server") return "opencode"
+function patchName(dir: string, kind: Kind): "opencode" | "lato" | "tui" {
+  if (kind === "server") return dir.endsWith(".lato") || dir === Global.make().config ? "lato" : "opencode"
   return "tui"
 }
 
 async function patchOne(dir: string, target: Target, spec: string, force: boolean, dep: PatchDeps): Promise<PatchOne> {
-  const name = patchName(target.kind)
+  const name = patchName(dir, target.kind)
   await using _ = await Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, name))}`)
 
-  const files = dep.files(dir, name)
+  const files = name === "lato" ? [path.join(dir, "lato.jsonc"), path.join(dir, "lato.json")] : dep.files(dir, name)
   let cfg = files[0]
   for (const file of files) {
     if (!(await dep.exists(file))) continue
@@ -419,7 +423,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
 }
 
 export async function patchPluginConfig(input: PatchInput, dep: PatchDeps = defaultPatchDeps): Promise<PatchResult> {
-  const dir = patchDir(input)
+  const dir = await patchDir(input)
   const items: PatchItem[] = []
   for (const target of input.targets) {
     const hit = await patchOne(dir, target, input.spec, Boolean(input.force), dep)

@@ -24,7 +24,7 @@ describe("PR CLI executable resolution", () => {
     ).toEqual(["/opt/lato/bin/lato"])
   })
 
-  test("falls back to the legacy OpenCode executable", () => {
+  test("does not fall back to an OpenCode executable", () => {
     expect(
       resolveCliCommand({
         runtime: "/usr/bin/node",
@@ -32,7 +32,7 @@ describe("PR CLI executable resolution", () => {
         exists: () => false,
         find: (name) => (name === "opencode" ? "/home/user/.local/bin/opencode" : null),
       }),
-    ).toEqual(["/home/user/.local/bin/opencode"])
+    ).toBeUndefined()
   })
 
   test("prefers an explicitly available Lato executable", () => {
@@ -46,7 +46,7 @@ describe("PR CLI executable resolution", () => {
     ).toEqual(["/home/user/.local/bin/lato"])
   })
 
-  test("returns no command when neither executable is available", () => {
+  test("returns no command when Lato is unavailable", () => {
     expect(
       resolveCliCommand({
         runtime: "/usr/bin/node",

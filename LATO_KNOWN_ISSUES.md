@@ -26,28 +26,39 @@
 - The desktop protocol scheme, app IDs, RPM package names, and artifact names still use OpenCode identifiers for compatibility.
 - CLI help-text snapshots now reflect Lato output; internal snapshot identifiers and upstream installation tests still contain OpenCode compatibility terminology.
 - The default mDNS hostname remains `opencode.local` for compatibility. `lato.local` is available only through explicit configuration.
-- `lato pr` uses the current invocation first, then a verified `lato`/`opencode` lookup; full installed-package integration remains unverified.
 - Desktop bundled CLI integration still uses OpenCode-compatible `opencode-cli` artifact names and `@opencode-ai/cli-*` packages; platform packaging verification and a future Lato distribution decision are required before renaming them.
-- Source builds report the version as `local`.
+- Source builds report the version as `lato local`.
 - Phase 2.75 smoke validation passed in a disposable project, but the results do not establish production or cross-platform release readiness.
 - Phase 3.0 ownership decisions remain open; see `LATO_OWNERSHIP_AND_COMPATIBILITY.md` before implementing package, configuration, storage, protocol, OAuth, installer, or update migrations.
 - Phase 3.1 primary identity cleanup is limited to verified user-facing copy; external OpenCode documentation, Zen/Console integrations, non-English locale review, and deferred web/console assets remain intentionally unresolved.
-- No Lato-native configuration filename has been approved or introduced. A future `lato.json` would require deterministic coexistence, precedence, conflict diagnostics, and migration ownership decisions.
-- Existing configuration precedence is complex because global files, explicit `OPENCODE_CONFIG`, project files, `.opencode` directories, `OPENCODE_CONFIG_CONTENT`, managed configuration, and runtime permission overrides participate at different stages; it is preserved and covered by focused tests.
-- Storage ownership remains undecided for global auth, provider credentials, the main database/session history, plugin metadata, project IDs/snapshots, and desktop userData stores; see `LATO_STORAGE_AND_MIGRATION_CONTRACT.md`.
+- Phase 4.2 introduced additive Lato configuration ownership with `lato.jsonc`, `lato.json`, `.lato`, `LATO_CONFIG`, `LATO_CONFIG_DIR`, and `LATO_CONFIG_CONTENT`; legacy OpenCode configuration remains readable. See `LATO_CONFIGURATION_GUIDE.md` and `LATO_CONFIGURATION_COMPATIBILITY.md`.
+- Configuration precedence now spans Lato and legacy global/project files, `.opencode`, `.lato`, explicit files, compatibility directories, inline content, account configuration, and managed configuration. V1 and V2 preserve their distinct merge models and are covered by focused tests.
+- Storage ownership remains undecided for global auth, provider credentials, the main database/session history, plugin metadata, project IDs/snapshots, and desktop userData stores; see `LATO_STORAGE_AND_MIGRATION_CONTRACT.md` and the Phase 4.3 audit/contract.
 - No SQLite online-backup abstraction is established across Bun and Node runtimes; raw copying of a live WAL database is unsafe and migration remains deferred.
 - Phase 3.5 provides only an isolated synthetic discovery/preview/SQLite backup prototype; no production migration implementation exists.
-- The prototype uses SQLite `VACUUM INTO` successfully in Bun and Node, but concurrent-writer coordination and a portable online-backup abstraction remain unresolved.
+- Phase 4.3 extends the synthetic prototype with platform-root fixtures, a versioned preview manifest, foreign-key checks, and migration-journal metadata verification; production migration remains unimplemented.
+- The prototype uses SQLite `VACUUM INTO` successfully in Bun and Node, but concurrent-writer coordination, application quiescence, and a production online-backup abstraction remain unresolved.
 - Phase 3.9 added `.github/workflows/lato-native-validation.yml`, but it has not run: Phase 3.9 prohibits commits/pushes and no native Windows/macOS host was available. Windows and macOS remain unverified.
-- Native Windows npm-style `.cmd` shims invoke the underlying `bin/opencode` script, so argv-based identity may resolve as `opencode`; compiled `lato.exe` remains the reliable wrapper pending native testing.
-- Full interactive `KVProvider`/theme restart, `useKV()` failure logging, packaged CLI/TUI wrappers, and Windows ACL/rename-over-existing behavior remain without native assertions.
+- Phase 4.4 command identity: public user-facing command is now `lato-cli` via `bin/lato-cli.cjs`; internal native binary remains `lato`; `bin/lato.cjs` is retained as an internal shim. Windows `.cmd`/PATHEXT behavior and packaged postinstall-generated wrappers remain unverified.
+- Phase 4.4 locally builds and launches `dist/lato-linux-x64/bin/lato` through `bin/lato-cli.cjs`; Windows/macOS native builds, package installation, Docker, Nix, and release workflows remain unverified.
+- The shared native-target resolver now supports Linux, macOS, and Windows package-layout naming, but only Linux x64 execution has been validated locally.
+- External distribution identifiers remain OpenCode-owned: the generated npm package is still `opencode-ai`, native optional packages and release archives remain `opencode-*`, the Docker image remains `ghcr.io/anomalyco/opencode`, AUR/Homebrew package names remain OpenCode, and the root `install` script still targets OpenCode releases. These are not approved Lato release channels.
+- Phase 4.4 audit confirms that the source `lato` launcher cannot currently find a native executable because the workspace package has no native optional dependencies or sibling binary; generated native packages still use `opencode-*` names. See `LATO_PHASE_4_4_DISTRIBUTION_AUDIT.md`.
+- A Lato-owned npm package name, native package namespace, release repository, installer URL, Docker image, Homebrew formula, AUR package, signing identity, and upgrade feed remain unapproved. Phase 4.4 must not publish or enable external installation until these identities are decided.
+- `packages/cli` still exposes the separate experimental `lildax` command. Its runtime lookup still uses `OPENCODE_BIN_PATH` and is outside the Lato application entry point.
+- `lato upgrade` and `lato uninstall` remain intentionally unavailable. The legacy OpenCode installation/upgrade/uninstall implementation remains present but is unreachable from normal Lato paths.
+- Provider IDs `opencode` and `opencode-go`, the `opencode.json` configuration filename, `OPENCODE_*` environment variables, `opencode.local` mDNS default, `.opencode` project directories, server headers, GitHub integration identifiers, and compatibility storage paths remain intentionally unchanged.
+- Source builds report `lato local`; release version output remains dependent on the distribution channel.
+- `lato pr` no longer falls back to an installed `opencode` executable. Full installed-package integration remains unverified.
+- Native Windows and macOS execution, including compiled `lato.exe`, `.cmd` shims, PATH/PATHEXT resolution, postinstall replacement, and signed binaries, remains unverified.
+- Full workspace typecheck, lint, native build, desktop packaging, and application launch verification were not run in Phase 4.1; only focused tests were executed.
 
 ## Resolved
 
 - Baseline working tree cleanliness and expected commit verified.
 - Dedicated local branch and baseline tag created.
 - WSL onboarding no longer downloads the upstream installer; English manual terminal setup is implemented and tested.
-- `lato pr` no longer requires a globally installed `lato` executable when the current or legacy `opencode` executable is available.
+- `lato pr` relaunches the current invocation when possible and otherwise discovers only `lato`; the OpenCode fallback was removed.
 - `lato uninstall` is guarded before any installation or filesystem operation and has regression coverage for the no-op safety path.
 - The OpenCode hosted UI proxy is disabled; embedded UI remains local and missing UI assets return a predictable local error.
 - The established `opencode.local` mDNS default is restored, with explicit custom hostname support preserved.
@@ -55,7 +66,7 @@
 - Approved Lato wordmark and icon are integrated into the primary logo, splash, favicon, and desktop icon paths.
 - `V1_API_MIGRATION.md` no longer references the deleted usage-exceeded dialog.
 - CLI/TUI and browser UI development startup were user-verified.
-- CLI display identity now follows the invoked executable: `lato` is primary while legacy `opencode` remains supported.
+- CLI display identity is unconditionally Lato; the legacy `opencode` executable path was removed.
 - Existing global/project configuration discovery, JSON/JSONC parsing, environment overrides, merge behavior, TUI configuration discovery, and V2 compatibility behavior were verified by focused configuration tests.
 - Existing storage paths and sensitive-data locations were inventoried in `LATO_STORAGE_AND_MIGRATION_CONTRACT.md`; no user data was read, copied, moved, or modified.
 - Synthetic storage discovery, read-only preview, WAL backup, and integrity verification were tested without accessing real user storage.
@@ -65,4 +76,8 @@
 - Project discovery, inspection, file reads/writes, Python and shell execution, permission approval/rejection, session persistence after backend restart, and provider switching were user-verified in `~/lato-smoke-test`.
 - The TUI theme root cause and preference path isolation are documented in `LATO_RUNTIME_IDENTITY_AND_PREFERENCE_ISOLATION.md`.
 - Cross-platform preference validation and its provider-test timing limitation are documented in `LATO_CROSS_PLATFORM_PREFERENCE_VALIDATION.md`.
-- Phase 3.9 verified temporary compiled `lato` and `opencode` executable identity on Linux using a test-only Bun compile; packaged distribution wrappers and native Windows/macOS execution remain pending.
+- Phase 4.1 removes the OpenCode application executable and `opencode` bin mapping; only `lato`/`bin/lato.cjs` remains. Runtime identity is constant Lato and ignores inherited identity environment values.
+- Phase 4.1 gives Lato a prefixed version output (`lato <version>`), removes the `lato pr` OpenCode fallback, updates the debug-agent hint, and makes the TUI preference path idempotent under `.../lato`.
+- Phase 4.1 updates build, postinstall, publish, Docker, Nix, and release-workflow binary paths from `opencode` to `lato`, while leaving inherited OpenCode distribution names unresolved.
+- Phase 4.1 keeps `opencode`/`opencode-go` provider IDs, endpoints, authentication, and configuration discovery unchanged; focused provider tests pass.
+- Phase 4.1 verifies Linux source and compiled Lato identity, executable arguments/exit codes, help/completion/errors, symlink invocation, TUI persistence, and state isolation.

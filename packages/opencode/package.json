@@ -16,8 +16,7 @@
     "dev:temporary": "bun run ./src/temporary.ts"
   },
   "bin": {
-    "lato": "./bin/opencode",
-    "opencode": "./bin/opencode"
+    "lato-cli": "./bin/lato-cli.cjs"
   },
   "exports": {
     "./*": "./src/*.ts"

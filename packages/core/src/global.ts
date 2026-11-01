@@ -10,7 +10,8 @@ import { makeGlobalNode } from "./effect/app-node"
 const app = "opencode"
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
+const config = latoConfigDir()
+const legacyConfig = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 const tmp = path.join(os.tmpdir(), app)
 
@@ -24,6 +25,7 @@ const paths = {
   repos: path.join(data, "repos"),
   cache,
   config,
+  legacyConfig,
   state,
   tmp,
 }
@@ -49,6 +51,7 @@ export interface Interface {
   readonly data: string
   readonly cache: string
   readonly config: string
+  readonly legacyConfig: string
   readonly state: string
   readonly tmp: string
   readonly bin: string
@@ -57,11 +60,13 @@ export interface Interface {
 }
 
 export function make(input: Partial<Interface> = {}): Interface {
+  const config = input.config ?? Flag.LATO_CONFIG_DIR ?? Path.config
   return {
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
-    config: Flag.OPENCODE_CONFIG_DIR ?? Path.config,
+    config,
+    legacyConfig: input.legacyConfig ?? (input.config ? config : Path.legacyConfig),
     state: Path.state,
     tmp: Path.tmp,
     bin: Path.bin,
@@ -85,3 +90,14 @@ export const layerWith = (input: Partial<Interface>) =>
   )
 
 export * as Global from "./global"
+
+function latoConfigDir() {
+  const home = process.env.OPENCODE_TEST_HOME ?? os.homedir()
+  const xdg = process.env.XDG_CONFIG_HOME
+  if (xdg) return path.join(xdg, "lato")
+  if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "Lato")
+  if (process.platform === "win32") {
+    return path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "Lato")
+  }
+  return path.join(home, ".config", "lato")
+}

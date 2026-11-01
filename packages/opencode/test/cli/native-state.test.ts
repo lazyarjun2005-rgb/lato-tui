@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { readJson, writeJsonAtomic } from "@opencode-ai/tui/util/persistence"
+import { cliPreferenceState } from "../../src/cli/identity"
 
 const roots: string[] = []
 
@@ -11,7 +12,7 @@ afterEach(async () => {
 })
 
 describe("compiled executable identity", () => {
-  test("compiled lato and opencode binaries resolve their own identity", async () => {
+  test("compiled lato binary resolves Lato identity", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "lato-native-binary-"))
     roots.push(root)
 
@@ -20,30 +21,42 @@ describe("compiled executable identity", () => {
     await Bun.write(entry, `import { cliScriptName } from ${JSON.stringify(identity)}\nconsole.log(cliScriptName())\n`)
 
     const extension = process.platform === "win32" ? ".exe" : ""
-    for (const name of ["lato", "opencode"] as const) {
-      const outfile = path.join(root, name + extension)
-      const build = Bun.spawn([process.execPath, "build", "--compile", entry, "--outfile", outfile], {
-        cwd: root,
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      const [buildError, buildCode] = await Promise.all([new Response(build.stderr).text(), build.exited])
-      if (buildCode !== 0) throw new Error(`failed to compile ${name} (${buildCode}): ${buildError}`)
+    const outfile = path.join(root, "lato" + extension)
+    const build = Bun.spawn([process.execPath, "build", "--compile", entry, "--outfile", outfile], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [buildError, buildCode] = await Promise.all([new Response(build.stderr).text(), build.exited])
+    if (buildCode !== 0) throw new Error(`failed to compile lato (${buildCode}): ${buildError}`)
 
-      const run = Bun.spawn([outfile], { cwd: root, stdout: "pipe", stderr: "pipe" })
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(run.stdout).text(),
-        new Response(run.stderr).text(),
-        run.exited,
-      ])
-      if (code !== 0) throw new Error(`failed to execute ${name} (${code}): ${stderr}`)
-      expect(stdout.trim()).toBe(name)
-    }
+    const run = Bun.spawn([outfile], { cwd: root, stdout: "pipe", stderr: "pipe" })
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(run.stdout).text(),
+      new Response(run.stderr).text(),
+      run.exited,
+    ])
+    if (code !== 0) throw new Error(`failed to execute lato (${code}): ${stderr}`)
+    expect(stdout.trim()).toBe("lato")
+
+    const override = Bun.spawn([outfile], {
+      cwd: root,
+      env: { ...process.env, LATO_RUNTIME_IDENTITY: "opencode" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [overrideOut, overrideErr, overrideCode] = await Promise.all([
+      new Response(override.stdout).text(),
+      new Response(override.stderr).text(),
+      override.exited,
+    ])
+    if (overrideCode !== 0) throw new Error(`failed to execute identity override (${overrideCode}): ${overrideErr}`)
+    expect(overrideOut.trim()).toBe("lato")
   }, 60000)
 })
 
 describe("native state resolution", () => {
-  test("resolves Lato and OpenCode roots through the real platform path stack", async () => {
+  test("resolves the Lato state root through the real platform path stack", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "lato-native-state-"))
     roots.push(root)
 
@@ -83,11 +96,9 @@ describe("native state resolution", () => {
       state: string
       root: string
       lato: string
-      opencode: string
-      entryPoint: Record<"lato" | "opencode", string>
+      entryPoint: string
       latoName: string
-      opencodeName: string
-      identity: Record<"lato" | "opencode" | "latoExe" | "opencodeExe" | "latoCmd", string>
+      identity: string
     }
 
     const state = path.join(root, "state", "opencode")
@@ -96,19 +107,10 @@ describe("native state resolution", () => {
     expect(result.state).toBe(state)
     expect(result.root).toBe(path.join(root, "state"))
     expect(result.lato).toBe(path.join(root, "state", "lato"))
-    expect(result.opencode).toBe(state)
+    expect(result.entryPoint).toBe(result.lato)
     expect(result.latoName).toBe("lato")
-    expect(result.opencodeName).toBe("opencode")
-    expect(result.lato).not.toBe(result.opencode)
-
-    expect(result.identity.lato).toBe("lato")
-    expect(result.identity.opencode).toBe("opencode")
-    expect(result.identity.latoExe).toBe("lato")
-    expect(result.identity.opencodeExe).toBe("opencode")
-    expect(result.identity.latoCmd).toBe("lato")
-
-    expect(result.entryPoint.lato).toBe(result.lato)
-    expect(result.entryPoint.opencode).toBe(result.opencode)
+    expect(result.identity).toBe("lato")
+    expect(cliPreferenceState(result.lato)).toBe(result.lato)
 
     if (process.platform === "win32") {
       expect(result.lato).toContain("\\")
@@ -118,25 +120,18 @@ describe("native state resolution", () => {
     }
 
     const latoFile = path.join(result.lato, "kv.json")
-    const opencodeFile = path.join(result.opencode, "kv.json")
-    const latoPreferences = { theme: "lato", theme_mode: "light", theme_mode_lock: "light" }
-    const opencodePreferences = { theme: "opencode", theme_mode: "dark" }
+    const compatibilityFile = path.join(result.state, "kv.json")
+    const preferences = { theme: "lato", theme_mode: "light", theme_mode_lock: "light" }
 
-    await writeJsonAtomic(opencodeFile, opencodePreferences)
-    await writeJsonAtomic(latoFile, latoPreferences)
+    await writeJsonAtomic(compatibilityFile, { theme: "compatibility" })
+    await writeJsonAtomic(latoFile, preferences)
 
-    expect(await readJson(latoFile)).toEqual(latoPreferences)
-    expect(await readJson(opencodeFile)).toEqual(opencodePreferences)
-    expect(latoFile).not.toBe(opencodeFile)
+    expect(await readJson(latoFile)).toEqual(preferences)
+    expect(await readJson(compatibilityFile)).toEqual({ theme: "compatibility" })
 
-    const updatedLato = { ...latoPreferences, theme: "lato-updated" }
-    await writeJsonAtomic(latoFile, updatedLato)
-    expect(await readJson(latoFile)).toEqual(updatedLato)
-    expect(await readJson(opencodeFile)).toEqual(opencodePreferences)
-
-    const updatedOpencode = { ...opencodePreferences, theme: "opencode-updated" }
-    await writeJsonAtomic(opencodeFile, updatedOpencode)
-    expect(await readJson(opencodeFile)).toEqual(updatedOpencode)
-    expect(await readJson(latoFile)).toEqual(updatedLato)
+    const updated = { ...preferences, theme: "lato-updated" }
+    await writeJsonAtomic(latoFile, updated)
+    expect(await readJson(latoFile)).toEqual(updated)
+    expect(await readJson(compatibilityFile)).toEqual({ theme: "compatibility" })
   }, 20000)
 })

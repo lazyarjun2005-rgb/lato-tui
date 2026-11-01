@@ -31,7 +31,7 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       return {
         home: Global.Path.home,
         state: Global.Path.state,
-        config: Global.Path.config,
+        config: Global.make().config,
         worktree: ctx.worktree,
         directory: ctx.directory,
       }

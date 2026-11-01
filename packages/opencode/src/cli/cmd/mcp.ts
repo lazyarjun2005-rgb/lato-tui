@@ -392,12 +392,24 @@ export const McpLogoutCommand = effectCmd({
 })
 
 async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
-
-  if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
-  }
+  const candidates = global
+    ? [
+        path.join(baseDir, "lato.jsonc"),
+        path.join(baseDir, "lato.json"),
+        path.join(baseDir, "opencode.jsonc"),
+        path.join(baseDir, "opencode.json"),
+        path.join(baseDir, "config.json"),
+      ]
+    : [
+        path.join(baseDir, ".lato", "lato.jsonc"),
+        path.join(baseDir, ".lato", "lato.json"),
+        path.join(baseDir, ".opencode", "opencode.jsonc"),
+        path.join(baseDir, ".opencode", "opencode.json"),
+        path.join(baseDir, "lato.jsonc"),
+        path.join(baseDir, "lato.json"),
+        path.join(baseDir, "opencode.jsonc"),
+        path.join(baseDir, "opencode.json"),
+      ]
 
   for (const candidate of candidates) {
     if (await Filesystem.exists(candidate)) {
@@ -405,8 +417,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
     }
   }
 
-  // Default to opencode.json if none exist
-  return candidates[0]
+  return global ? path.join(baseDir, "lato.jsonc") : path.join(baseDir, "lato.jsonc")
 }
 
 async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
@@ -494,7 +505,7 @@ export const McpAddCommand = effectCmd({
               ...(Object.keys(environment).length ? { environment } : {}),
             }
 
-        const configPath = await resolveConfigPath(Global.Path.config, true)
+        const configPath = await resolveConfigPath(Global.make().config, true)
         await addMcpToConfig(args.name, mcpConfig, configPath)
         prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
         return
@@ -508,7 +519,7 @@ export const McpAddCommand = effectCmd({
       // Resolve config paths eagerly for hints
       const [projectConfigPath, globalConfigPath] = await Promise.all([
         resolveConfigPath(ctx.worktree),
-        resolveConfigPath(Global.Path.config, true),
+        resolveConfigPath(Global.make().config, true),
       ])
 
       // Determine scope

@@ -43,6 +43,10 @@ jobs:
         working-directory: packages/opencode
         run: bun test --timeout 30000 test/cli/identity.test.ts
 
+      - name: Run executable entry point tests
+        working-directory: packages/opencode
+        run: bun test --timeout 30000 test/cli/executables.test.ts
+
       - name: Run native state resolution tests
         working-directory: packages/opencode
         run: bun test --timeout 30000 test/cli/native-state.test.ts

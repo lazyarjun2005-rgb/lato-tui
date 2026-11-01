@@ -3,11 +3,14 @@
 import { $ } from "bun"
 import path from "path"
 import { fileURLToPath } from "url"
+import { createRequire } from "module"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
+const require = createRequire(import.meta.url)
+const { nativeTargetName } = require("../bin/native-target.cjs")
 
 process.chdir(dir)
 
@@ -144,16 +147,12 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" --libc="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
-  const name = [
-    pkg.name,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
+  const name = nativeTargetName({
+    platform: item.os,
+    arch: item.arch,
+    baseline: item.avx2 === false,
+    musl: item.abi === "musl",
+  })
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
@@ -175,9 +174,9 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
+      target: name.replace(/^lato/, "bun") as any,
+      outfile: `dist/${name}/bin/lato`,
+      execArgv: [`--user-agent=lato/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
     files: {
@@ -205,12 +204,12 @@ for (const item of targets) {
   // Embedding the bundle invalidates the linker's ad-hoc signature, and macOS 27+
   // SIGKILLs binaries with invalid pages. Re-sign ad-hoc; release CI re-signs with Developer ID.
   if (item.os === "darwin" && process.platform === "darwin") {
-    await $`codesign --force --sign - dist/${name}/bin/opencode`
+    await $`codesign --force --sign - dist/${name}/bin/lato`
   }
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${name}/bin/opencode`
+    const binaryPath = `dist/${name}/bin/lato`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
       const versionOutput = await $`${binaryPath} --version`.text()

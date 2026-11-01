@@ -310,14 +310,71 @@ it.instance("falls back to generic username when system user info is unavailable
   }),
 )
 
-it.effect("creates global jsonc config with schema when no global configs exist", () =>
+it.effect("does not create global config when no global configs exist", () =>
   withGlobalConfig({}, ({ dir }) =>
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-      const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
-      expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
+      expect(yield* FSUtil.use.existsSafe(path.join(dir, "lato.jsonc"))).toBe(false)
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+  ),
+)
+
+it.effect("Lato global config overrides legacy filenames in the active directory", () =>
+  withGlobalConfig({}, ({ dir }) =>
+    Effect.gen(function* () {
+      yield* writeConfigEffect(dir, { model: "legacy/model" }, "opencode.json")
+      yield* writeConfigEffect(dir, { model: "lato/model" }, "lato.json")
+      expect((yield* Config.use.get().pipe(provideInstanceEffect(dir))).model).toBe("lato/model")
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+  ),
+)
+
+it.effect("Lato explicit config overrides legacy explicit config", () =>
+  Effect.gen(function* () {
+    const legacy = yield* tmpdirScoped({ config: { model: "legacy/model" } })
+    const lato = yield* tmpdirScoped({ config: { model: "lato/model" } })
+    const config = yield* withGlobalConfig({}, ({ dir }) =>
+      withProcessEnvs(
+        {
+          OPENCODE_CONFIG: path.join(legacy, "opencode.json"),
+          LATO_CONFIG: path.join(lato, "opencode.json"),
+        },
+        Config.use.get().pipe(provideInstanceEffect(dir)),
+      ),
+    ).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
+    expect(config.model).toBe("lato/model")
+  }),
+)
+
+it.effect("fails when LATO_CONFIG points to a missing file", () =>
+  withGlobalConfig({}, ({ dir }) =>
+    withProcessEnv(
+      "LATO_CONFIG",
+      path.join(dir, "missing-lato.jsonc"),
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(Config.use.get().pipe(provideInstanceEffect(dir)))
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(String(Cause.squash(exit.cause))).toContain("LATO_CONFIG file not found")
+      }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+    ),
+  ),
+)
+
+it.effect("Lato inline config overrides legacy inline config", () =>
+  withGlobalConfig({}, ({ dir }) =>
+    withProcessEnvs(
+      {
+        OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: "legacy/model" }),
+        LATO_CONFIG_CONTENT: JSON.stringify({ model: "lato/model" }),
+      },
+      Config.use.get().pipe(
+        provideInstanceEffect(dir),
+        Effect.map((config) => {
+          expect(config.model).toBe("lato/model")
+        }),
+      ),
+    ).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
 )
 
@@ -363,12 +420,12 @@ it.instance("updates config and preserves empty shell sentinel", () =>
     yield* writeConfigEffect(
       test.directory,
       { $schema: "https://opencode.ai/config.json", shell: "bash" },
-      "config.json",
+      "lato.jsonc",
     )
 
     yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(ConfigV1.Info, { shell: "" }, "test:config")))
 
-    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "lato.jsonc"))
     expect(writtenConfig).toMatchObject({ shell: "" })
   }),
 )
@@ -468,7 +525,7 @@ for (const input of projectInputs) {
     Effect.gen(function* () {
       const instance = yield* TestInstance
       const fs = yield* FSUtil.Service
-      const file = path.join(instance.directory, "config.json")
+      const file = path.join(instance.directory, "opencode.json")
       yield* fs.writeFileString(file, yield* fs.readFileString(path.join(updateFixtures, input)))
       const patch = ConfigParse.schema(ConfigV1.Info, yield* fs.readJson(`${prefix}-patch.json`), input)
       yield* Config.use.update(patch)
@@ -511,7 +568,7 @@ it.instance("rejects a project update with native agent permissions without writ
   Effect.gen(function* () {
     const instance = yield* TestInstance
     const fs = yield* FSUtil.Service
-    const file = path.join(instance.directory, "config.json")
+    const file = path.join(instance.directory, "lato.jsonc")
     const before = JSON.stringify({ agents: { reviewer: { permissions: [] } } })
     yield* fs.writeFileString(file, before)
     const exit = yield* Effect.exit(Config.use.update({ username: "changed" }))
@@ -692,13 +749,13 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
-it.instance("preserves env variables when adding $schema to config", () =>
+it.instance("preserves env variables without mutating config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
     "secret_value",
     Effect.gen(function* () {
       const test = yield* TestInstance
-      // Config without $schema - should trigger auto-add
+      // Config without $schema must remain unchanged after reading.
       yield* FSUtil.use.writeWithDirs(
         path.join(test.directory, "opencode.json"),
         JSON.stringify({ username: "{env:PRESERVE_VAR}" }),
@@ -710,7 +767,7 @@ it.instance("preserves env variables when adding $schema to config", () =>
       const content = yield* FSUtil.use.readFileString(path.join(test.directory, "opencode.json"))
       expect(content).toContain("{env:PRESERVE_VAR}")
       expect(content).not.toContain("secret_value")
-      expect(content).toContain("$schema")
+      expect(content).not.toContain("$schema")
     }),
   ),
 )
@@ -1084,7 +1141,7 @@ it.instance("updates config and writes to file", () =>
       svc.update(ConfigParse.schema(ConfigV1.Info, { model: "updated/model" }, "test:config")),
     )
 
-    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "config.json"))
+    const writtenConfig = yield* FSUtil.use.readJson(path.join(test.directory, "lato.jsonc"))
     expect(writtenConfig).toMatchObject({ model: "updated/model" })
   }),
 )

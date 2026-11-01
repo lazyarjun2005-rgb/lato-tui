@@ -38,15 +38,15 @@ OpenCode-hosted services are not Lato-owned. Lato must not silently depend on th
 
 ### Executable contract
 
-- `lato` is the primary future executable name.
-- `opencode` remains a compatibility executable and must continue to work for existing installations and scripts.
-- `lato pr` resolves the current invocation first, then a verified `lato` executable, then a verified legacy `opencode` executable.
+- `lato` is the canonical application executable name.
+- The OpenCode application executable is removed from the Lato package and build; OpenCode providers remain supported under their `opencode` provider IDs.
+- `lato pr` resolves the current invocation first, then a verified `lato` executable. It must not fall back to an OpenCode application executable.
 - Executable fallback must not use hardcoded machine paths, pass the original `pr` arguments into the relaunch, or create recursive PR invocations.
 - A missing executable must produce an actionable error rather than spawning an arbitrary command.
 
 ### Distribution contract
 
-The current repository still builds and packages OpenCode-named binaries and packages. A future Lato package migration requires:
+The current repository emits a Lato-native binary but still uses inherited OpenCode package, archive, Docker, AUR/Homebrew, and installer identifiers. A future Lato distribution migration requires:
 
 - An approved Lato package name and registry owner.
 - A defined relationship between Lato packages and existing `opencode-ai` installations.
@@ -156,17 +156,17 @@ All update mechanisms remain disabled or gated until independent infrastructure 
 
 The following decisions require explicit product-owner approval:
 
-| Decision | Current status | Required before |
-|---|---|---|
-| Lato package registry and package names | Not approved | Distribution implementation |
-| Lato-native config filename/directory | Not approved | Configuration migration |
-| Lato data directory and migration policy | Not approved | Storage migration |
-| Lato protocol scheme | Not approved | Protocol migration |
-| New desktop application IDs | Not approved | Desktop distribution migration |
-| Lato hosted UI/docs/support domains | Not approved | Hosted-service replacement |
-| Lato OAuth and Console identity | Not approved | Account integration changes |
-| Lato update feed and signing keys | Not approved | Update enablement |
-| Lato WSL installer and package-manager ownership | Not approved | Installer implementation |
+| Decision                                         | Current status | Required before                |
+| ------------------------------------------------ | -------------- | ------------------------------ |
+| Lato package registry and package names          | Not approved   | Distribution implementation    |
+| Lato-native config filename/directory            | Not approved   | Configuration migration        |
+| Lato data directory and migration policy         | Not approved   | Storage migration              |
+| Lato protocol scheme                             | Not approved   | Protocol migration             |
+| New desktop application IDs                      | Not approved   | Desktop distribution migration |
+| Lato hosted UI/docs/support domains              | Not approved   | Hosted-service replacement     |
+| Lato OAuth and Console identity                  | Not approved   | Account integration changes    |
+| Lato update feed and signing keys                | Not approved   | Update enablement              |
+| Lato WSL installer and package-manager ownership | Not approved   | Installer implementation       |
 
 Until these decisions are approved, preserve compatibility identifiers, keep updates disabled, and avoid automatic migration.
 

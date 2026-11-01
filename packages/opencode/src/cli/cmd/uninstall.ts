@@ -106,7 +106,7 @@ async function collectRemovalTargets(args: UninstallArgs, method: Method): Promi
   const directories: RemovalTargets["directories"] = [
     { path: Global.Path.data, label: "Data", keep: args.keepData },
     { path: Global.Path.cache, label: "Cache", keep: false },
-    { path: Global.Path.config, label: "Config", keep: args.keepConfig },
+    { path: Global.make().config, label: "Config", keep: args.keepConfig },
     { path: Global.Path.state, label: "State", keep: false },
   ]
 
