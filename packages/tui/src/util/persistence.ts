@@ -19,11 +19,13 @@ export async function appendText(filePath: string, content: string) {
   await appendFile(filePath, content)
 }
 
-// Windows can hold the rename destination lockable for a moment after it is
-// created or read (handles without delete sharing, antivirus/indexer scans of
-// freshly replaced files), so renames over an existing file fail transiently
-// with these codes even though a retry succeeds. POSIX renames do not have
-// this window, so retries stay Windows-only to keep other platforms unchanged.
+// Windows replace-renames are mutually exclusive on the destination. Under a
+// burst of writers, MoveFileEx lets one rename win while the others fail with
+// EPERM/EACCES/EBUSY; each retry round can therefore promote at most one
+// writer, so a bounded retry budget alone is exhausted by peer writers even
+// when nothing external holds the file. These codes also cover transient
+// external locks (antivirus/indexer scans, readers without delete sharing).
+// Both protections stay Windows-only so POSIX keeps its previous behavior.
 const renameRetryDelaysMs = [10, 25, 50, 100, 200, 400]
 
 function transientWindowsRename(error: unknown) {
@@ -46,7 +48,7 @@ async function renameAtomic(temporary: string, filePath: string) {
   }
 }
 
-export async function writeJsonAtomic(filePath: string, value: unknown) {
+async function writeJsonNow(filePath: string, value: unknown) {
   await mkdir(path.dirname(filePath), { recursive: true })
   const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`
   try {
@@ -58,4 +60,32 @@ export async function writeJsonAtomic(filePath: string, value: unknown) {
     await rm(temporary, { force: true }).catch(() => undefined)
     throw error
   }
+}
+
+// Queue same-process writes per destination on Windows so competing writers
+// never race the same replace-rename. Unique temporary files are still created
+// per write, so each queued write remains independently atomic. POSIX keeps
+// its parallel last-writer-wins renames.
+const writeQueues = new Map<string, Promise<void>>()
+
+function queueKey(filePath: string) {
+  const resolved = path.resolve(filePath)
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved
+}
+
+async function writeJsonQueued(filePath: string, value: unknown) {
+  const key = queueKey(filePath)
+  const previous = writeQueues.get(key) ?? Promise.resolve()
+  const write = previous.catch(() => undefined).then(() => writeJsonNow(filePath, value))
+  writeQueues.set(key, write)
+  try {
+    await write
+  } finally {
+    if (writeQueues.get(key) === write) writeQueues.delete(key)
+  }
+}
+
+export async function writeJsonAtomic(filePath: string, value: unknown) {
+  if (process.platform !== "win32") return writeJsonNow(filePath, value)
+  return writeJsonQueued(filePath, value)
 }

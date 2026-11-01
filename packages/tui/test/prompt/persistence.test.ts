@@ -41,9 +41,9 @@ test("atomic JSON writes remain valid under concurrent synthetic updates", async
   }
 })
 
-// Windows rename semantics can transiently fail when a concurrent reader holds
-// the destination, so this pairs writers with readers: successful reads must
-// never observe torn or out-of-range values, and writers must resolve without
+// Windows replace-renames contend when many writers target one destination,
+// and a concurrent reader adds scheduling pressure. Writers must serialize
+// without observing torn or out-of-range values, and all must resolve without
 // leaving temporary files behind.
 test("atomic JSON writes stay valid while readers and writers contend", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "lato-tui-persistence-rw-"))
