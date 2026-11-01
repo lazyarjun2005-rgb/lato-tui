@@ -1,0 +1,68 @@
+# Lato Compatibility Matrix
+
+The authoritative ownership, migration, and compatibility contracts are defined in [`LATO_OWNERSHIP_AND_COMPATIBILITY.md`](LATO_OWNERSHIP_AND_COMPATIBILITY.md). This matrix summarizes the current compatibility surface; it does not authorize migrations.
+
+Storage inventory and migration rules are defined in [`LATO_STORAGE_AND_MIGRATION_CONTRACT.md`](LATO_STORAGE_AND_MIGRATION_CONTRACT.md).
+
+The isolated Phase 3.5 prototype and runtime limitations are documented in [`LATO_STORAGE_PROTOTYPE_REPORT.md`](LATO_STORAGE_PROTOTYPE_REPORT.md).
+
+| Surface                 | Current identity                                 | Lato status                                            | Compatibility rule                                        |
+| ----------------------- | ------------------------------------------------ | ------------------------------------------------------ | --------------------------------------------------------- |
+| CLI command             | `opencode`                                       | `lato` added; legacy `opencode` retained               | Keep both bins during transition                          |
+| CLI user guidance       | `opencode models`                                | Primary guidance uses `lato models`                    | Preserve legacy executable; new copy uses Lato            |
+| CLI display identity    | Invocation name                                  | `lato` primary; `opencode` legacy display retained     | Preserve compatibility help/completion for legacy users   |
+| Desktop bundled CLI     | `opencode-cli` / `@opencode-ai/cli-*`            | Existing bundled service path retained                 | Do not rename until distribution ownership is approved    |
+| Global config files     | `opencode.jsonc`, `opencode.json`, `config.json` | Supported and tested                                   | Preserve discovery and existing merge order               |
+| Project config files    | `opencode.jsonc`, `opencode.json`                | Supported and tested                                   | Preserve project/worktree discovery behavior              |
+| Config directory        | `~/.config/opencode`, `.opencode`                | Retained                                               | Do not move or rename                                     |
+| Config environment      | `OPENCODE_CONFIG*`, `OPENCODE_*`                 | Preserved and tested                                   | Do not rename or reinterpret existing variables           |
+| Lato-native config      | Not approved                                     | Not introduced                                         | Requires explicit filename and precedence decision        |
+| PR CLI relaunch         | Current executable                               | Current invocation, `lato`, then `opencode` fallback   | Never require a globally installed `lato` binary          |
+| Root package name       | `opencode`                                       | Pending                                                | Private; change only after distribution decision          |
+| Published CLI package   | `opencode-ai`                                    | Pending                                                | Do not rename until publish strategy is verified          |
+| Workspace scope         | `@opencode-ai/*`                                 | Retained initially                                     | Internal imports must keep resolving                      |
+| Runtime service tags    | `@opencode/*`                                    | Retained initially                                     | No behavior change                                        |
+| Provider IDs            | `opencode`, `opencode-go`                        | Retained, no promotion or automatic priority           | Keep provider compatibility; do not re-add upsells        |
+| Config dir              | `~/.config/opencode`                             | Retained                                               | Must remain readable                                      |
+| Data dir                | `~/.local/share/opencode`                        | Retained                                               | Must not be moved or deleted                              |
+| Auth file               | `${data}/auth.json`                              | Retained                                               | Must remain readable                                      |
+| MCP auth                | `${data}/mcp-auth.json`                          | Retained/shared                                        | Treat as secret; no automatic migration                   |
+| Database                | `${data}/opencode.db`                            | Retained                                               | No destructive migration                                  |
+| Session/storage data    | `${data}/storage`, snapshots, plans              | Retained/shared                                        | Copy-first migration only                                 |
+| Plugin/skill state      | `.opencode`, state/cache roots                   | Retained/shared                                        | Preserve discovery and provenance                         |
+| Desktop user data       | Electron `app.getPath("userData")`               | Retained/shared                                        | Preserve IDs/store names; platform paths unverified       |
+| Storage prototype       | Synthetic roots only                             | Discovery/preview/backup tested                        | No production path or user data access                    |
+| TUI preferences         | `${state}/kv.json`                               | `lato` uses sibling `lato` state; `opencode` unchanged | Do not migrate or copy existing preferences automatically |
+| Preference validation   | Linux native + platform-independent tests        | Identity, paths, persistence, permissions verified     | Native Windows/macOS CI defined but not yet executed      |
+| Native validation CI    | `.github/workflows/lato-native-validation.yml`   | Ubuntu/Windows/macOS focused test matrix               | Must not publish, deploy, or release                      |
+| Project config          | `.opencode`                                      | Retained                                               | Must remain readable                                      |
+| Env prefix              | `OPENCODE_*`                                     | Retained                                               | No breaking rename                                        |
+| Desktop product name    | `Lato`                                           | Changed                                                | Local data paths and app IDs preserved                    |
+| Desktop protocol        | `opencode://`                                    | Retained                                               | Add Lato scheme only with compatibility plan              |
+| Update feeds            | `anomalyco/opencode*`                            | Disabled in CLI, TUI, server, and builder config       | Do not enable without a Lato-owned feed                   |
+| Lato uninstall          | No independent package ID                        | Disabled in development builds                         | Never remove OpenCode packages or shared user data        |
+| Legacy installation     | `packages/opencode/src/installation`             | Retained but removed from normal runtime graphs        | Reach only through explicitly controlled future paths     |
+| Hosted UI fallback      | `https://app.opencode.ai`                        | Disabled; missing UI returns local HTTP 503            | Never proxy silently to upstream hosted UI                |
+| Default mDNS hostname   | `opencode.local`                                 | Restored for compatibility                             | Explicit custom domains remain supported                  |
+| WSL auto-installer      | `https://opencode.ai/install`                    | Disabled; safe unavailable result                      | Never auto-download upstream; use manual terminal setup   |
+| WSL existing CLI        | `~/.opencode/bin/opencode`                       | Detected and used when present                         | Preserve user-managed CLI compatibility                   |
+| Primary logo assets     | Lato wordmark and icon                           | Approved PNG assets integrated                         | Do not redraw or recolor; preserve source artwork         |
+| Favicon                 | Lato icon                                        | PNG/ICO and manifest resources replaced                | Use existing paths; no invented manifest entries          |
+| Desktop icons           | Lato icon                                        | Dev, beta, and prod resources replaced                 | Preserve channel paths and builder references             |
+| Zen provider            | `opencode`                                       | Optional; no automatic priority                        | Must not be mandatory or auto-preferred                   |
+| Go subscription         | `opencode-go`                                    | Upsell UI and retry actions removed                    | Preserve provider code until safe removal                 |
+| Third-party providers   | Various                                          | Keep                                                   | No removal                                                |
+| Third-party free models | Various                                          | Keep                                                   | No removal                                                |
+| MIT attribution         | `Copyright (c) 2025 opencode`                    | Kept                                                   | Legal requirement                                         |
+
+## Phase 2.75 validation
+
+- Local development smoke validation passed for CLI/TUI startup, browser UI startup, project discovery and inspection, file reads/writes, Python and shell execution, permission approval/rejection, session persistence after backend restart, and provider switching.
+- Validation used disposable project state under `~/lato-smoke-test` and did not migrate or modify repository user data.
+- Full typecheck, production builds, E2E, desktop packaging, visual regression, and cross-platform release validation remain outstanding.
+
+## Data safety
+
+- No user data migration is to be performed without explicit approval.
+- No existing database or authentication file may be overwritten.
+- Legacy compatibility is preferred over premature internal renaming.

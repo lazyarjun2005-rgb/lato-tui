@@ -1,0 +1,14 @@
+[data-component="logo-mark"] {
+  width: 16px;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+[data-component="logo-splash"] {
+  object-fit: contain;
+}
+
+[data-component="logo"] {
+  display: block;
+  object-fit: contain;
+}

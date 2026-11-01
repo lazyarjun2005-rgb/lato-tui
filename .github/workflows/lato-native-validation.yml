@@ -1,0 +1,56 @@
+name: lato-native-validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - lato-development
+  pull_request:
+
+concurrency:
+  group: ${{ format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  native:
+    name: native (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run CLI identity tests
+        working-directory: packages/opencode
+        run: bun test --timeout 30000 test/cli/identity.test.ts
+
+      - name: Run native state resolution tests
+        working-directory: packages/opencode
+        run: bun test --timeout 30000 test/cli/native-state.test.ts
+
+      - name: Run TUI preference persistence tests
+        working-directory: packages/tui
+        run: bun test --timeout 30000 test/prompt/persistence.test.ts
+
+      - name: Run TUI runtime tests
+        working-directory: packages/tui
+        run: bun test --timeout 30000 test/runtime.test.tsx
