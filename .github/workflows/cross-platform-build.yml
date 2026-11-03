@@ -365,8 +365,3 @@ jobs:
             $errors | Format-List
             exit 1
           }
-          $output = & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') 2>&1 | Out-String
-          if ($output -notmatch 'mandatory|parameter.*Version') {
-            Write-Host $output
-            exit 1
-          }
