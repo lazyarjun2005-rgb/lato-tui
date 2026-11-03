@@ -232,16 +232,20 @@ jobs:
         working-directory: packages/opencode
         run: |
           mkdir -p out
-          tar -czf "out/${{ matrix.target.name }}.tar.gz" -C "dist/${{ matrix.target.name }}/bin" lato
-          ls -l "out/${{ matrix.target.name }}.tar.gz"
+          bun run script/archive.ts assemble \
+            --target "${{ matrix.target.name }}" \
+            --binary "dist/${{ matrix.target.name }}/bin/lato" \
+            --output "out/${{ matrix.target.name }}.tar.gz"
 
       - name: Package archive (macOS)
         if: matrix.target.platform == 'darwin'
         working-directory: packages/opencode
         run: |
           mkdir -p out
-          zip -j "out/${{ matrix.target.name }}.zip" "dist/${{ matrix.target.name }}/bin/lato"
-          ls -l "out/${{ matrix.target.name }}.zip"
+          bun run script/archive.ts assemble \
+            --target "${{ matrix.target.name }}" \
+            --binary "dist/${{ matrix.target.name }}/bin/lato" \
+            --output "out/${{ matrix.target.name }}.zip"
 
       - name: Package archive (Windows)
         if: matrix.target.platform == 'windows'
@@ -249,16 +253,60 @@ jobs:
         working-directory: packages/opencode
         run: |
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          $bin = "dist/${{ matrix.target.name }}/bin/lato.exe"
-          if (-not (Test-Path $bin)) { throw "Expected binary not found: $bin" }
-          Compress-Archive -Path $bin -DestinationPath "out/${{ matrix.target.name }}.zip" -Force
-          Get-Item "out/${{ matrix.target.name }}.zip" | Format-List
+          bun run script/archive.ts assemble `
+            --target "${{ matrix.target.name }}" `
+            --binary "dist/${{ matrix.target.name }}/bin/lato.exe" `
+            --output "out/${{ matrix.target.name }}.zip"
 
       - name: Upload archive
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.target.name }}
           path: packages/opencode/out/
+          if-no-files-found: error
+
+  validate-archives:
+    name: validate archives and checksums
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download build archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: lato-*
+          path: packages/opencode/out
+          merge-multiple: true
+
+      - name: Validate archive set
+        working-directory: packages/opencode
+        run: |
+          for archive in out/*.tar.gz out/*.zip; do
+            [ -f "$archive" ] || continue
+            target="$(basename "$archive" | sed -E 's/\.(tar\.gz|zip)$//')"
+            bun run script/archive.ts validate --target "$target" --archive "$archive"
+          done
+
+      - name: Generate and validate SHA256SUMS
+        working-directory: packages/opencode
+        run: |
+          bun run script/archive.ts manifest --dir out --output out/SHA256SUMS
+          bun run script/archive.ts validate-manifest --dir out --manifest out/SHA256SUMS
+
+      - name: Upload validated archive manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lato-sha256sums
+          path: packages/opencode/out/SHA256SUMS
           if-no-files-found: error
 
   test:
@@ -298,3 +346,27 @@ jobs:
       - name: Run TUI runtime tests
         working-directory: packages/tui
         run: bun test --timeout 30000 test/runtime.test.tsx
+
+      - name: Validate installer fixture contract
+        if: matrix.os == 'ubuntu-latest'
+        run: bash packages/opencode/script/installer-fixtures.sh
+
+      - name: Validate PowerShell installer syntax
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $env:GITHUB_WORKSPACE 'install.ps1'),
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+          $output = & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') 2>&1 | Out-String
+          if ($output -notmatch 'mandatory|parameter.*Version') {
+            Write-Host $output
+            exit 1
+          }

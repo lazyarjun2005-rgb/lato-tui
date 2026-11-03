@@ -1,4 +1,7 @@
 import { describe, expect } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import {
   LLMClient,
   LLMError,
@@ -360,6 +363,37 @@ const setupOverflowRecovery = Effect.gen(function* () {
   return session
 })
 
+async function runSessionRecoveryChild(phase: "write" | "read", root: string) {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "test",
+      "test/session-runner.test.ts",
+      "--timeout",
+      "30000",
+      "-t",
+      `session recovery child ${phase}`,
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        OPENCODE_DB: path.join(root, "opencode.db"),
+        OPENCODE_TEST_HOME: root,
+        XDG_CONFIG_HOME: path.join(root, "config"),
+        XDG_DATA_HOME: path.join(root, "data"),
+        XDG_STATE_HOME: path.join(root, "state"),
+        XDG_CACHE_HOME: path.join(root, "cache"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  )
+  const output = `${await new Response(child.stdout).text()}${await new Response(child.stderr).text()}`
+  const exitCode = await child.exited
+  if (exitCode !== 0) throw new Error(`session recovery child ${phase} failed (${exitCode}):\n${output}`)
+}
+
 const messageTexts = (request: LLMRequest, role: "user" | "system") =>
   request.messages.flatMap((message) =>
     message.role === role ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : [])) : [],
@@ -627,6 +661,60 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: message.id, type: "user", text: "Run automatically" },
       ])
+    }),
+  )
+
+  it.effect("completes one first-session turn with the deterministic fake provider", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "smoke", ["Lato fixture response"]).completeEvents
+
+      const message = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Hello Lato" }) })
+      const messages = yield* session.messages({ sessionID })
+      const user = messages.find((item) => item.type === "user")
+      const assistant = messages.find((item) => item.type === "assistant")
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.model).toBe(model)
+      expect(message.prompt.text).toBe("Hello Lato")
+      expect(user?.type).toBe("user")
+      expect(user?.text).toBe("Hello Lato")
+      expect(assistant?.type).toBe("assistant")
+      expect(assistant?.type === "assistant" ? assistant.content[0]?.text : undefined).toBe("Lato fixture response")
+    }),
+  )
+
+  it.effect("session recovery child write", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "recovery", ["Recovered response"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Persist this session" }) })
+    }),
+  )
+
+  it.effect("session recovery child read", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const messages = yield* session.context(sessionID)
+      const user = messages.find((item) => item.type === "user")
+      const assistant = messages.find((item) => item.type === "assistant")
+      expect(user?.text).toBe("Persist this session")
+      expect(assistant?.type).toBe("assistant")
+      expect(assistant?.type === "assistant" ? assistant.content[0]?.text : undefined).toBe("Recovered response")
+    }),
+  )
+
+  it.effect("recovers the session after a process restart", () =>
+    Effect.promise(async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "lato-session-recovery-"))
+      try {
+        await runSessionRecoveryChild("write", root)
+        await runSessionRecoveryChild("read", root)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
     }),
   )
 

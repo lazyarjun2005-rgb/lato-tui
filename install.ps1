@@ -1,164 +1,102 @@
 <#
 .SYNOPSIS
-    Lato CLI Installer for Windows
+    Lato CLI installer for Windows developer-preview releases.
 
-.DESCRIPTION
-    Downloads and installs the latest Lato CLI release for Windows.
-    Run from PowerShell: irm https://raw.githubusercontent.com/lazyarjun2005-rgb/lato-tui/main/install.ps1 | iex
-
-    Asset names must match packages/opencode/script/build.ts:
-      lato-windows-<arch>[-baseline].zip
-
-.PARAMETER Version
-    Specific version to install (default: latest)
-
-.PARAMETER InstallDir
-    Installation directory (default: $env:USERPROFILE\.local\bin)
+.EXAMPLE
+    .\install.ps1 -Version 0.1.0-preview.1
 #>
 
 param(
-    [string]$Version = "latest",
+    [Parameter(Mandatory = $true)]
+    [string]$Version,
     [string]$InstallDir = "$env:USERPROFILE\.local\bin"
 )
 
 $ErrorActionPreference = "Stop"
+$Repo = "lazyarjun2005-rgb/lato-tui"
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("lato-cli-" + [guid]::NewGuid().ToString("N"))
+$TemporaryTarget = $null
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') { throw "Lato installer: invalid version '$Version'" }
 
-$REPO = "lazyarjun2005-rgb/lato-tui"
-
-function Write-Info { param([string]$Message) Write-Host "[INFO] $Message" -ForegroundColor Cyan }
-function Write-Success { param([string]$Message) Write-Host "[SUCCESS] $Message" -ForegroundColor Green }
-function Write-Warn { param([string]$Message) Write-Host "[WARN] $Message" -ForegroundColor Yellow }
-function Write-Error { param([string]$Message) Write-Host "[ERROR] $Message" -ForegroundColor Red }
-
-function Detect-Platform {
-    $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
-    if ($arch -eq "AMD64" -or $arch -eq "x64") { $script:ARCH = "x64" }
-    elseif ($arch -eq "ARM64") { $script:ARCH = "arm64" }
-    else { Write-Error "Unsupported architecture: $arch. Lato publishes x64 and arm64 builds only."; exit 1 }
-
-    $script:OS = "windows"
-    Write-Info "Detected platform: $OS/$ARCH"
+function Fail([string]$Message) {
+    throw "Lato installer: $Message"
 }
 
-# Baseline builds target x64 CPUs without AVX2. arm64 has no baseline variant.
 function Test-Avx2 {
-    if ($script:ARCH -ne "x64") { return $true }
+    if ($script:Arch -ne "x64") { return $true }
     try {
-        $sig = @"
-[DllImport("kernel32.dll")]
-public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);
-"@
-        $k32 = Add-Type -MemberDefinition $sig -Name "LatoKernel32" -Namespace "LatoWin32" -PassThru -ErrorAction Stop
-        return [bool]$k32::IsProcessorFeaturePresent(40)
+        $signature = '[DllImport("kernel32.dll")] public static extern bool IsProcessorFeaturePresent(int feature);'
+        $type = Add-Type -MemberDefinition $signature -Name LatoKernel32 -Namespace LatoWin32 -PassThru
+        return [bool]$type::IsProcessorFeaturePresent(40)
     } catch {
-        return $true
-    }
-}
-
-function Get-AssetName {
-    $name = "lato-$($script:OS)-$($script:ARCH)"
-    if ($script:ARCH -eq "x64" -and -not (Test-Avx2)) {
-        $name = "$name-baseline"
-    }
-    return "$name.zip"
-}
-
-function Get-LatestVersion {
-    try {
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest" -ErrorAction Stop
-        return $response.tag_name.TrimStart('v')
-    } catch {
-        Write-Error "Failed to fetch latest version: $_"
-        exit 1
-    }
-}
-
-function Download-Binary {
-    param([string]$Version, [string]$AssetName)
-
-    $url = "https://github.com/$REPO/releases/download/v$Version/$AssetName"
-    $outFile = "$env:TEMP\$AssetName"
-
-    Write-Info "Downloading $AssetName v$Version..."
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $outFile -ErrorAction Stop
-    } catch {
-        Write-Error "Failed to download from $url"
-        Write-Warn "This version/platform may not have a pre-built binary yet."
-        Write-Warn "Check available releases at: https://github.com/$REPO/releases"
-        exit 1
-    }
-
-    $script:DOWNLOAD_FILE = $outFile
-}
-
-function Extract-Binary {
-    Write-Info "Extracting binary..."
-    $extractDir = "$env:TEMP\lato-extract"
-    if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $extractDir | Out-Null
-
-    Expand-Archive -Path $script:DOWNLOAD_FILE -DestinationPath $extractDir -Force
-
-    $binary = Get-ChildItem $extractDir -Filter "lato*.exe" | Select-Object -First 1
-    if (-not $binary) {
-        Write-Error "lato.exe not found in archive"
-        exit 1
-    }
-
-    if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null }
-    $targetPath = Join-Path $InstallDir "lato-cli.exe"
-    Move-Item $binary.FullName $targetPath -Force
-    $script:INSTALLED_PATH = $targetPath
-}
-
-function Verify-Install {
-    if (Test-Path $script:INSTALLED_PATH) {
-        try {
-            $versionOutput = & $script:INSTALLED_PATH --version
-            Write-Success "Installed: $versionOutput"
-            return $true
-        } catch {
-            Write-Error "Installation verification failed: $_"
-            return $false
-        }
-    } else {
-        Write-Error "Installation verification failed - binary not found"
         return $false
     }
 }
 
-function Update-Path {
-    $currentPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-    if ($currentPath -like "*$InstallDir*") {
-        Write-Info "Install directory already in user PATH"
-    } else {
-        Write-Warn "Install directory $InstallDir is not in your user PATH."
-        Write-Warn "Add it by running the following in PowerShell:"
-        Write-Warn "  [Environment]::SetEnvironmentVariable('Path', \"$InstallDir;$currentPath\", 'User')"
-        Write-Warn "Then restart your PowerShell session."
+function Get-Target {
+    $nativeArch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITEW6432")
+    if (-not $nativeArch) { $nativeArch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE") }
+    if ($nativeArch -in @("AMD64", "x64")) { $script:Arch = "x64" }
+    elseif ($nativeArch -eq "ARM64") { $script:Arch = "arm64" }
+    else { Fail "unsupported architecture '$nativeArch'; Lato supports x64 and arm64" }
+    $suffix = if ($script:Arch -eq "x64" -and -not (Test-Avx2)) { "-baseline" } else { "" }
+    return "lato-windows-$($script:Arch)$suffix"
+}
+
+function Get-Checksum([string]$Manifest, [string]$Name) {
+    $matches = @(Get-Content -LiteralPath $Manifest | Where-Object {
+        $parts = $_ -split '\s+', 2
+        $parts.Count -eq 2 -and $parts[1] -eq $Name
+    })
+    if ($matches.Count -ne 1) { Fail "SHA256SUMS has no unique entry for $Name" }
+    return (($matches[0] -split '\s+', 2)[0]).ToLowerInvariant()
+}
+
+function Test-Archive([string]$Archive, [string]$Expected) {
+    $extract = Join-Path $TempDir "archive"
+    Expand-Archive -LiteralPath $Archive -DestinationPath $extract -Force
+    $files = @(Get-ChildItem -LiteralPath $extract -File -Recurse)
+    if ($files.Count -ne 1 -or $files[0].Name -ne $Expected -or $files[0].DirectoryName -ne $extract) {
+        Fail "archive must contain only root-level $Expected"
     }
+    return $files[0].FullName
 }
 
-# Main
-Write-Info "Lato CLI Installer for Windows"
-Write-Info "Repository: $REPO"
+try {
+    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+    $target = Get-Target
+    $archiveName = "$target.zip"
+    $baseUrl = "https://github.com/$Repo/releases/download/v$Version"
+    $archive = Join-Path $TempDir $archiveName
+    $manifest = Join-Path $TempDir "SHA256SUMS"
 
-Detect-Platform
+    Write-Host "Lato target: $target"
+    Write-Host "Downloading explicit release $Version"
+    Invoke-WebRequest -Uri "$baseUrl/$archiveName" -OutFile $archive
+    Invoke-WebRequest -Uri "$baseUrl/SHA256SUMS" -OutFile $manifest
 
-if ($Version -eq "latest") {
-    $Version = Get-LatestVersion
-    Write-Info "Latest version: $Version"
-}
+    $expected = Get-Checksum $manifest $archiveName
+    $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) { Fail "SHA-256 verification failed for $archiveName" }
 
-$assetName = Get-AssetName
-Download-Binary $Version $assetName
-Extract-Binary
+    $binary = Test-Archive $archive "lato.exe"
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+    $TemporaryTarget = Join-Path $InstallDir (".lato-cli.$([guid]::NewGuid().ToString('N')).tmp")
+    Copy-Item -LiteralPath $binary -Destination $TemporaryTarget
+    Move-Item -LiteralPath $TemporaryTarget -Destination (Join-Path $InstallDir "lato-cli.exe") -Force
+    $TemporaryTarget = $null
 
-if (Verify-Install) {
-    Update-Path
-    Write-Success "Installation complete! Run 'lato-cli' to start."
-    Write-Info "If 'lato-cli' is not found, restart your PowerShell or run: \$env:Path += \";$InstallDir\""
-} else {
-    exit 1
+    $installed = Join-Path $InstallDir "lato-cli.exe"
+    & $installed --version
+    Write-Host "Installed $installed"
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (($userPath -split ';') -contains $InstallDir) {
+        Write-Host "$InstallDir is already on the user PATH"
+    } else {
+        Write-Host "Add $InstallDir to the user PATH, then open a new terminal"
+    }
+    Write-Warning "Developer-preview binaries are currently unsigned."
+} finally {
+    if ($TemporaryTarget -and (Test-Path -LiteralPath $TemporaryTarget)) { Remove-Item -LiteralPath $TemporaryTarget -Force }
+    if (Test-Path -LiteralPath $TempDir) { Remove-Item -LiteralPath $TempDir -Recurse -Force }
 }

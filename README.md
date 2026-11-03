@@ -6,7 +6,7 @@
 
 Lato is an independent, cross-platform AI coding assistant for the terminal. It combines an interactive TUI with a scriptable CLI, a local server, and a locally served web interface, so you can work with an AI agent without leaving your development workflow.
 
-> **Project status:** early development. Lato runs from source. Linux source use is validated; the Windows and macOS source workflows are prepared but have not yet been natively validated. No packaged installers or binary releases are published.
+> **Project status:** early development. Lato runs from source, and focused Linux, Windows, and macOS CI validation is passing. macOS x64 runtime execution remains capability-limited on the current ARM64 runner. Installer scripts and CI release tooling exist in the repository, but no packaged installers or binary releases are published, and packaged installation is not usable yet.
 
 ## Features
 
@@ -25,11 +25,11 @@ Screenshots and terminal recordings will be added after the first public UI capt
 
 ## Platform status
 
-| Platform | Source CLI/TUI | Packaged binary | Status                                                     |
-| -------- | -------------- | --------------- | ---------------------------------------------------------- |
-| Linux    | Validated      | Not published   | Validated on Arch Linux x64 with Bun 1.4.4                 |
-| Windows  | Prepared       | Not published   | Native validation pending; Windows Terminal is recommended |
-| macOS    | Prepared       | Not published   | Native validation pending                                  |
+| Platform | Source CLI/TUI | Packaged binary | Status                                                                  |
+| -------- | -------------- | --------------- | ----------------------------------------------------------------------- |
+| Linux    | Validated      | Not published   | Native x64 and musl CI validation passed                                |
+| Windows  | Validated      | Not published   | Focused native x64 CI validation passed; Windows Terminal recommended   |
+| macOS    | Validated      | Not published   | ARM64 CI validation passed; x64 builds are verified, runtime is limited |
 
 Source installation is the only supported installation method at this time.
 
@@ -93,13 +93,44 @@ bun run dev -- --help
 bun run dev -- providers
 ```
 
-Native Windows validation has not been completed. The workflow above follows the repository's cross-platform scripts, but Windows-specific terminal, path, and permission behavior is still being verified. No official `lato.exe` is published; do not download one from third-party sources.
+Focused native Windows validation passes in CI, including identity, executable,
+state-path, persistence, and runtime coverage. No official `lato.exe` is
+published; do not download one from third-party sources.
 
 ### Notes for all platforms
 
 - Run `bun install` from the repository root; Lato uses a Bun workspace.
 - A source run is tied to the checkout. These steps do not install a global `lato` command.
 - Confirm `bun --version` reports 1.4.4 before reporting installation issues.
+
+## Packaged Developer Preview installation — not available yet
+
+A packaged Developer Preview without a repository checkout or Bun is prepared, but is **not usable today**, because no Lato GitHub Release exists. The repository contains installer scripts (`install.sh` for Linux/macOS, `install.ps1` for Windows) plus CI archive and checksum jobs, and they only start working once the first Lato GitHub Release is published with archives and a `SHA256SUMS` manifest. This README will be updated with verified commands and download URLs at that time. Do not run installers from third-party mirrors, and do not treat GitHub Actions artifacts as release downloads.
+
+When the first release is published, the documented installation behavior will be:
+
+|                               |                                                                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Channel                       | GitHub Releases on `lazyarjun2005-rgb/lato-tui`, manual and explicit only                                                               |
+| Version selection             | An explicit version is required (for example `0.1.0-preview.1`); there is no `latest` channel                                           |
+| Archives                      | `lato-<os>-<arch>[-baseline][-musl].tar.gz` (Linux) or `.zip` (macOS/Windows) plus `SHA256SUMS`                                         |
+| Verification                  | SHA-256 checksum entry for the archive must match `SHA256SUMS`; mismatch aborts without touching any installed binary                   |
+| Linux/macOS install directory | `$XDG_BIN_HOME` or `$HOME/.local/bin`, overridable with `--install-dir`                                                                 |
+| Windows install directory     | `%USERPROFILE%\.local\bin`, overridable with `-InstallDir`                                                                              |
+| Installed command             | `lato-cli` (the internal binary inside each archive is `lato` or `lato.exe`)                                                            |
+| Upgrade/reinstall             | Re-run the installer with the new explicit version; replacement is staged atomically and any existing install survives a failed run     |
+| PATH setup                    | The installers print the exact directory to add to `PATH` and never edit shell startup files or the Windows PATH variable automatically |
+| Uninstaller                   | Not provided                                                                                                                            |
+| Signing                       | Developer-preview binaries are unsigned; Windows installers print an unsigned-preview warning                                           |
+
+Planned platform behavior, matching the CI build matrix:
+
+- Linux x64 and ARM64, with automatic musl and no-AVX2 (`-baseline`) selection.
+- macOS ARM64 on Apple Silicon; macOS x64 with automatic `-baseline` selection.
+- Windows x64, x64-baseline, and ARM64 (ARM64 binaries are build-verified in CI, not runtime-validated).
+- A successful install verifies `lato-cli --version` with the absolute installed path before reporting success.
+
+These behaviors are covered by local installer fixture tests; real installation against published release assets has not been executed yet and will only be claimed after it is.
 
 ## Configuration basics
 
@@ -147,7 +178,7 @@ Contributions are welcome. Keep changes focused, add or update tests for behavio
 
 These are planned directions, not commitments or currently available features:
 
-- Native Windows and macOS validation in CI.
+- Lato-owned developer-preview release contract.
 - The first packaged binaries and installers.
 - Storage ownership decisions and a safe migration path.
 - Broader terminal, platform, and accessibility coverage.

@@ -448,3 +448,139 @@
 - Left inherited OpenCode package/archive/Docker/AUR/Homebrew identifiers and the root installer unresolved because no Lato publication channel exists.
 - Focused Linux verification: CLI identity/PR 8 pass; executables 5 pass; native state 2 pass; TUI persistence/runtime 9 pass; provider 103 pass; help snapshots 1 pass with 34 snapshots.
 - Native Windows/macOS execution, native builds, package installs, Docker/Nix builds, and release workflows were not run. No commit, push, publication, or user-data migration was performed.
+
+## 2026-11-03 - Phase 4.5 final user-facing identity audit
+
+- Reconstructed the phase status from the transformation plan, log, compatibility matrix, known issues, and Phase 4.4 reports.
+- Audited user-facing OpenCode references across the CLI/TUI, app, desktop, package metadata, installers, workflows, URLs, assets, provider/model surfaces, and compatibility paths.
+- Confirmed the public application identity remains `lato-cli`, with internal native binaries named `lato`/`lato.exe`.
+- Preserved OpenCode free-model catalog entries, provider integrations, provider IDs (`opencode`, `opencode-go`), configuration names, environment variables, authentication paths, storage identifiers, protocol names, and legal attribution.
+- Updated stale platform-validation status in `README.md`, `LATO_COMPATIBILITY_MATRIX.md`, and `LATO_KNOWN_ISSUES.md` after the successful `51156f4` CI workflows.
+- Documented unresolved user-facing OpenCode links and inherited distribution metadata where no verified Lato-owned destination or publication channel exists.
+- No source code, workflows, lockfiles, assets, provider IDs, compatibility identifiers, or distribution endpoints were changed.
+
+## 2026-11-03 - Phase 5 developer-preview distribution proposal
+
+- Revised `LATO_PHASE_5_DEVELOPER_PREVIEW_PLAN.md` to define an explicit
+  cross-platform installation contract for Linux, Windows, and macOS.
+- Documented per-OS install directories, PATH behavior, `lato-cli`/`lato.exe`
+  naming, upgrade/reinstall safety, checksum verification, unsupported target
+  handling, and build-only runtime limitations.
+- Clarified that Actions artifacts are not public Release assets and that the
+  current installer scripts are not usable until an approved Release and
+  checksum manifest exist.
+- Added ordered milestones for release contract, archives, installers,
+  deterministic provider fixtures, first-session smoke coverage, process-restart
+  recovery, and focused CI validation.
+- This is a planning-only proposal. No Phase 5 implementation, release,
+  package publication, commit, or push was performed.
+
+## 2026-11-03 - Phase 5 Milestones 2-3 archive foundation
+
+- Added `packages/opencode/script/archive.ts` for deterministic per-target
+  archive assembly, root executable validation, archive-set validation, SHA-256
+  manifest generation, and manifest verification.
+- Updated `.github/workflows/cross-platform-build.yml` to use the archive tool
+  for Linux, macOS, and Windows packaging while retaining the existing 12-target
+  matrix and runtime/build-only distinctions.
+- Added a non-publishing `validate-archives` CI job that downloads the 12 Actions
+  artifacts, validates their archive contents, creates a lexical `SHA256SUMS`
+  manifest, and uploads only that manifest as an Actions artifact.
+- Locally validated the tool with 12 tiny placeholder executables; no native
+  build, dependency installation, release upload, or public publication was
+  performed.
+- Public GitHub Releases, installer implementation, signing, provider fixtures,
+  first-session smoke tests, and process-restart recovery remain pending.
+
+## 2026-11-03 - Phase 5 Milestone 4 explicit-version installers
+
+- Replaced the placeholder `install.sh` and `install.ps1` behavior with an
+  explicit-version developer-preview installer contract.
+- Linux/macOS detect the existing target matrix, including x64 baseline and
+  Linux musl selection; Windows detects x64/ARM64 and x64 baseline selection.
+- Installers download the versioned archive and `SHA256SUMS`, verify SHA-256,
+  validate the exact root-level executable, stage the executable safely, and
+  print PATH guidance without editing shell startup or user PATH state.
+- Default user install locations remain `$HOME/.local/bin`/`XDG_BIN_HOME` on
+  Linux and macOS and `%USERPROFILE%\\.local\\bin` on Windows.
+- No release was published and no native installer was tested against a real
+  GitHub Release; validation is fixture/static only.
+- Signing, notarization, uninstall, package-manager publication, and `latest`
+  channel support remain pending.
+
+## 2026-11-03 - Phase 5 installer hardening validation
+
+- Added `packages/opencode/script/installer-fixtures.sh` to exercise the Unix
+  installer contract with local fixture archives and a fake downloader.
+- Fixture validation covers missing/malformed versions, upgrade/reinstall,
+  missing manifests and entries, checksum mismatch, corrupt/unexpected archives,
+  previous-binary preservation, and temporary-target cleanup.
+- Added CI checks for PowerShell parsing and mandatory-version behavior on the
+  Windows test runner.
+- Hardened version parsing and temporary-target cleanup in both installers.
+- Local fixture validation passed; native Windows PowerShell parsing and real
+  Release installation remain CI/publishing-dependent and were not claimed as
+  locally validated.
+- No release, public asset, commit, or push was performed.
+
+## 2026-11-03 - Phase 5 Milestones 5-6 deterministic first-session smoke
+
+- Added one focused test to `packages/core/test/session-runner.test.ts` using
+  the existing test-only `LLMClient.Service` seam and fake model.
+- The test creates an isolated SessionV2 session, sends `Hello Lato`, receives
+  deterministic text `Lato fixture response`, verifies the request/model and
+  projected user/assistant messages, and exits through the existing Effect test
+  scope.
+- No provider ID, production provider implementation, network dependency, real
+  credential, or session-recovery behavior was added or changed.
+- Focused validation passed: one named `session-runner.test.ts` test, 1 pass,
+  0 fail, with 87 tests filtered out.
+- Process-restart session recovery remains the next reliability milestone and
+  was not started.
+
+## 2026-11-03 - Phase 5 Milestone 7 process-restart session recovery
+
+- Added a focused `session-runner.test.ts` recovery test that launches two
+  sequential Bun test subprocesses against the same isolated SQLite database.
+- The first process creates a session and persists a deterministic user message
+  plus fake-provider assistant response; the second process reopens the same
+  session ID and verifies both messages.
+- Added only a test-environment change so an explicitly supplied `OPENCODE_DB`
+  is preserved instead of being forced to `:memory:` by the core test preload.
+- Focused validation passed: 1 recovery test, 1 pass, 90 tests filtered out.
+- No production session/storage architecture, compatibility path, credential,
+  database, or migration behavior was changed. Provider fixtures and further
+  Phase 5 milestones remain outside this task.
+
+## 2026-11-03 - Phase 5 final review and developer-preview readiness
+
+- Reviewed the full uncommitted Phase 4.5 and Phase 5 changeset against the
+  review checklist; verified archive names, checksum manifest format, staged
+  replacement, and PATH guidance match between `archive.ts`, both installers,
+  and the fixtures.
+- Found and fixed one verified installer defect: `install.sh` selected `EXT`
+  with a short-circuited conditional as the last statement of `detect_target`,
+  so under `set -euo pipefail` the function returned 1 and the installer exited
+  silently on macOS before downloading anything. Replaced it with an explicit
+  `if`. Linux was unaffected, which is why the earlier fixture and CI runs did
+  not expose it.
+- Added a darwin zip fixture scenario to
+  `packages/opencode/script/installer-fixtures.sh` with a scenario-aware
+  `uname` stub, a `lato-darwin-arm64.zip` fixture, and a combined checksum
+  manifest; the full fixture suite passes, now covering Linux tar.gz and
+  darwin zip target selection, upgrade, and all failure modes.
+- Reviewed `cross-platform-build.yml`: packaging now routes through
+  `archive.ts assemble`, the non-publishing `validate-archives` job generates
+  and validates `SHA256SUMS`, and the test job adds the installer fixture on
+  ubuntu plus PowerShell parse and mandatory-version checks on windows. These
+  run only after a commit containing them is pushed; the green runs on
+  `51156f4` predate them.
+- Updated the README: the project status line, and a new packaged
+  Developer Preview section that labels packaged installation as unavailable
+  and documents the intended channel, versions, archives, checksum
+  verification, install directories, PATH behavior, upgrade behavior,
+  unsigned-preview notice, and per-platform limitations without fabricating
+  URLs.
+- No commit, push, release, package publication, or compatibility identifier
+  change was made. Release publication and native validation require separate
+  explicit approval.

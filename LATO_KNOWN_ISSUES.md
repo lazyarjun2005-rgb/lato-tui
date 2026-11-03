@@ -38,9 +38,9 @@
 - Phase 3.5 provides only an isolated synthetic discovery/preview/SQLite backup prototype; no production migration implementation exists.
 - Phase 4.3 extends the synthetic prototype with platform-root fixtures, a versioned preview manifest, foreign-key checks, and migration-journal metadata verification; production migration remains unimplemented.
 - The prototype uses SQLite `VACUUM INTO` successfully in Bun and Node, but concurrent-writer coordination, application quiescence, and a production online-backup abstraction remain unresolved.
-- Phase 3.9 added `.github/workflows/lato-native-validation.yml`, but it has not run: Phase 3.9 prohibits commits/pushes and no native Windows/macOS host was available. Windows and macOS remain unverified.
+- Phase 3.9's native validation workflow now passes on Linux, Windows, and macOS ARM64 in CI. macOS x64 artifacts build successfully, but runtime verification is build-only on the current ARM64 runner when Bun 1.4.4 cannot execute without AVX.
 - Phase 4.4 command identity: public user-facing command is now `lato-cli` via `bin/lato-cli.cjs`; internal native binary remains `lato`; `bin/lato.cjs` is retained as an internal shim. Windows `.cmd`/PATHEXT behavior and packaged postinstall-generated wrappers remain unverified.
-- Phase 4.4 locally builds and launches `dist/lato-linux-x64/bin/lato` through `bin/lato-cli.cjs`; Windows/macOS native builds, package installation, Docker, Nix, and release workflows remain unverified.
+- Phase 4.4 cross-platform CI builds all defined targets and validates Linux musl, Windows x64, and macOS ARM64 runtime paths; macOS x64 runtime execution remains runner/Bun capability-limited. Package installation, Docker, Nix, and release workflows remain unverified.
 - The shared native-target resolver now supports Linux, macOS, and Windows package-layout naming, but only Linux x64 execution has been validated locally.
 - External distribution identifiers remain OpenCode-owned: the generated npm package is still `opencode-ai`, native optional packages and release archives remain `opencode-*`, the Docker image remains `ghcr.io/anomalyco/opencode`, AUR/Homebrew package names remain OpenCode, and the root `install` script still targets OpenCode releases. These are not approved Lato release channels.
 - Phase 4.4 audit confirms that the source `lato` launcher cannot currently find a native executable because the workspace package has no native optional dependencies or sibling binary; generated native packages still use `opencode-*` names. See `LATO_PHASE_4_4_DISTRIBUTION_AUDIT.md`.
@@ -50,7 +50,7 @@
 - Provider IDs `opencode` and `opencode-go`, the `opencode.json` configuration filename, `OPENCODE_*` environment variables, `opencode.local` mDNS default, `.opencode` project directories, server headers, GitHub integration identifiers, and compatibility storage paths remain intentionally unchanged.
 - Source builds report `lato local`; release version output remains dependent on the distribution channel.
 - `lato pr` no longer falls back to an installed `opencode` executable. Full installed-package integration remains unverified.
-- Native Windows and macOS execution, including compiled `lato.exe`, `.cmd` shims, PATH/PATHEXT resolution, postinstall replacement, and signed binaries, remains unverified.
+- Native Windows x64 execution and persistence tests now pass in CI. Compiled `.cmd`/PATHEXT behavior, postinstall replacement, signed binaries, and macOS Intel runtime execution remain unverified.
 - Full workspace typecheck, lint, native build, desktop packaging, and application launch verification were not run in Phase 4.1; only focused tests were executed.
 
 ## Resolved
