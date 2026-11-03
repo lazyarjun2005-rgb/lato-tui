@@ -212,7 +212,12 @@ jobs:
           fi
           chmod +x "$BIN"
           if arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
-            arch -x86_64 "$BIN" --version
+            AVX="$(arch -x86_64 sysctl -n hw.optional.avx1_0 2>/dev/null || true)"
+            if [ "$AVX" = "1" ]; then
+              arch -x86_64 "$BIN" --version
+            else
+              echo "::warning::x86_64 Rosetta is available but AVX is unavailable; Bun 1.4.4 cannot execute ${{ matrix.target.name }} on this runner. Build-only verification is used."
+            fi
           else
             echo "::warning::Rosetta 2 is unavailable; ${{ matrix.target.name }} is build-only on this runner and is not runtime-verified."
           fi
