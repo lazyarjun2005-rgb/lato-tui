@@ -21,6 +21,11 @@ name: cross-platform-build
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version stamped into the binaries (for example 0.1.0-preview.2); branch-push builds leave it unset and keep the development stamp"
+        required: true
+        type: string
   push:
     branches:
       - lato-development
@@ -147,6 +152,9 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      # Empty on push/PR events, so development builds keep the existing stamp.
+      OPENCODE_VERSION: ${{ inputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -182,7 +190,12 @@ jobs:
             exit 1
           fi
           chmod +x "$BIN" || true
-          "$BIN" --version
+          version_output="$("$BIN" --version)"
+          echo "$version_output"
+          if [ -n "${OPENCODE_VERSION:-}" ] && [ "$version_output" != "lato $OPENCODE_VERSION" ]; then
+            echo "::error::Version stamp mismatch: expected 'lato $OPENCODE_VERSION', got '$version_output'"
+            exit 1
+          fi
 
       - name: Verify musl binary in Alpine
         if: matrix.target.smoke == 'docker'
@@ -197,9 +210,14 @@ jobs:
           # The musl binaries dynamically link libstdc++/libgcc, matching the
           # runtime deps the Dockerfile installs. Alpine's base image lacks them,
           # so install them in the matching architecture before executing.
-          docker run --rm --platform "${{ matrix.target.docker_platform }}" \
+          version_output="$(docker run --rm --platform "${{ matrix.target.docker_platform }}" \
             -v "$PWD/dist/${{ matrix.target.name }}/bin:/app:ro" \
-            alpine:3.20 sh -c 'apk add --no-cache libstdc++ libgcc >/dev/null && /app/lato --version'
+            alpine:3.20 sh -c 'apk add --no-cache libstdc++ libgcc >/dev/null && /app/lato --version')"
+          echo "$version_output"
+          if [ -n "${OPENCODE_VERSION:-}" ] && [ "$version_output" != "lato $OPENCODE_VERSION" ]; then
+            echo "::error::Version stamp mismatch: expected 'lato $OPENCODE_VERSION', got '$version_output'"
+            exit 1
+          fi
 
       - name: Verify macOS x64 via Rosetta
         if: matrix.target.smoke == 'rosetta'
@@ -214,7 +232,12 @@ jobs:
           if arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
             AVX="$(arch -x86_64 sysctl -n hw.optional.avx1_0 2>/dev/null || true)"
             if [ "$AVX" = "1" ]; then
-              arch -x86_64 "$BIN" --version
+              version_output="$(arch -x86_64 "$BIN" --version)"
+              echo "$version_output"
+              if [ -n "${OPENCODE_VERSION:-}" ] && [ "$version_output" != "lato $OPENCODE_VERSION" ]; then
+                echo "::error::Version stamp mismatch: expected 'lato $OPENCODE_VERSION', got '$version_output'"
+                exit 1
+              fi
             else
               echo "::warning::x86_64 Rosetta is available but AVX is unavailable; Bun 1.4.4 cannot execute ${{ matrix.target.name }} on this runner. Build-only verification is used."
             fi
