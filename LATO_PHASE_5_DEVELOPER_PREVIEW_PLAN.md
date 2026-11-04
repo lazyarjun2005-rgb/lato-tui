@@ -1,13 +1,24 @@
 # Lato Phase 5 Developer-Preview Release Plan
 
-Status: **implementation complete and locally validated. Release publication,
-CI execution of the new archive/installer jobs, and native installation
-validation remain unapproved and unverified.**
+Status: **implemented, CI-executed, released, and real-machine validated.**
+Prereleases `v0.1.0-preview.1` and `v0.1.0-preview.2` are published on GitHub
+Releases (prerelease channel, never marked "latest"). `v0.1.0-preview.2` was
+built from CI run `41696675487` at commit `c4e7db8de65ba9673bbba51a86a3a6eecf29a121`
+with CI-asserted version stamps (`lato 0.1.0-preview.2` in every
+runtime-verified target), verified by checksum against the manifest, published
+from those exact run artifacts, and used to update a real Arch Linux x64
+(no-AVX2) installation via the official installer; `lato-cli --version`
+reported `lato 0.1.0-preview.2` and the existing user data was preserved.
+Windows and macOS installer runs on real machines remain outstanding.
 
 Reviewer note: the final review found and fixed one verified installer defect
 (a `set -e` early exit on the macOS branch of `install.sh`), added a darwin zip
-fixture scenario, and updated the README to document packaged installation as
-unavailable until a real release exists.
+fixture scenario, and shipped the first two published previews. The first
+preview (`v0.1.0-preview.1`, CI run `41645034351` at commit `3bc5ac9`) shipped
+with development version stamps inside the binaries; the cross-platform
+workflow gained a required `version` dispatch input and strict installed-stamp
+assertions in commit `c4e7db8`, so `v0.1.0-preview.2` stamped releases
+correctly.
 
 Baseline: `51156f4ba6b7902504c549fbe0f6b420fa4ef572` on
 `lato-development`.
@@ -37,17 +48,16 @@ out of scope until separately approved.
 
 Before implementation, the following facts must remain explicit:
 
-- The source workflow is available through `git clone`, `bun install`, and
+- The source workflow remains available through `git clone`, `bun install`, and
   `bun run dev` from the repository root.
-- CI builds and uploads Actions artifacts for the 12 targets, but no public Lato
-  GitHub Release currently exists.
-- `install.sh` and `install.ps1` are implemented and fixture-validated, but
-  they resolve GitHub Release URLs and remain unusable until matching Release
-  assets and checksum manifests exist.
-- `lato-cli` is not currently a globally installable command from a fresh
-  checkout.
-- No README installation instructions may claim that a release installer works
-  until a real release is created and validated.
+- CI builds and uploads Actions artifacts for the 12 targets; the dependent
+  `validate-archives` job then publishes a validated `SHA256SUMS` artifact.
+- `install.sh` and `install.ps1` are fixture-validated, CI-executed, and used to
+  install two published prereleases; releases are explicit-version only.
+- `lato-cli` installs through the official installers from published Releases;
+  no `latest` channel, uninstaller, signing, or update channel exists.
+- README installation instructions now describe the published previews and
+  separately mark which platforms have been exercised on real machines.
 
 ## Implemented Milestones
 
@@ -269,8 +279,12 @@ needed.
 
 ### Milestone 4: Harden installer behavior and version selection
 
-Implementation status: **implemented for the explicit-version developer-preview
-contract; native installation and public release validation remain pending.**
+Implementation status: **implemented, CI-executed, and validated against two
+published releases.** `v0.1.0-preview.1` was installed on a real Arch Linux
+machine, and `v0.1.0-preview.2` upgraded it in place through the same official
+installer: explicit version accepted, checksum verified, atomic staged
+replacement, config/session data preserved, PATH guidance printed, and the
+reporter and `lato-cli --version` both printed `lato 0.1.0-preview.2`.
 
 Implemented in `install.sh` and `install.ps1`:
 
@@ -287,12 +301,13 @@ Implemented in `install.sh` and `install.ps1`:
 - PATH guidance is printed without editing shell startup files or user PATH.
 - Uninstall and signing remain intentionally unimplemented.
 
-Current validation is limited to static/syntax checks, Linux shell fixtures, and
-CI-configured Windows PowerShell checks. No public release exists, so native
-download and installation have not been validated against a real Release.
+Current validation includes static/syntax checks, Linux shell fixtures,
+CI-configured Windows PowerShell checks, and native download/install/upgrade
+against two real Releases on Linux x64. No `latest` channel exists; the
+installer requires an explicit version before downloading.
 
-Keep `latest` disabled until a real release exists. The first implementation
-must support an explicit version before adding `latest`. Once approved:
+If `latest` is ever introduced, it must only be after a deliberate product
+decision, and it must then:
 
 - Resolve `latest` only through the Lato GitHub Releases API.
 - Permit an explicit version/tag or release URL only through documented inputs.
@@ -448,21 +463,24 @@ milestone.
 
 ### Milestone 8: Add focused CI validation
 
-Implementation status: **partially implemented; none of it CI-executed yet,
-because the workflow changes are uncommitted.**
-
-Implemented in `.github/workflows/cross-platform-build.yml`: a non-publishing
-`validate-archives` job that downloads all 12 build artifacts, validates each
-archive, then generates and validates the lexical `SHA256SUMS` manifest and
-uploads only that manifest; a `Validate installer fixture contract` step on
-`ubuntu-latest`; a PowerShell parser plus mandatory-version check for
-`install.ps1` on `windows-latest`. The published commit `51156f4` is green on
-both workflows, but its runs predate these changes, so this milestone remains
-unvalidated in CI until a commit containing them is pushed.
+Implementation status: **implemented and CI-executed.** A non-publishing
+`validate-archives` job downloads all 12 build artifacts, validates each
+archive, generates and validates the lexical `SHA256SUMS` manifest, and uploads
+only that manifest. On `ubuntu-latest`, a `Validate installer fixture contract`
+step runs the installer fixture suite for Linux and darwin zip selection, and
+a `Validate shell installer syntax` step covers `install.sh` with
+`ShellCheck`-grade `bash -n` plus mandatory-version checks. On `windows-latest`,
+a PowerShell parser plus mandatory-version check covers `install.ps1`. These
+jobs executed successfully for the published releases (CI run `41696675487`
+for `v0.1.0-preview.2`; run `41645034351` for `v0.1.0-preview.1`). The
+workflow also gained a required `version` dispatch input and strict
+installed-stamp assertions, so the dispatched run failed-closed until every
+runtime-verified target printed `lato 0.1.0-preview.2`.
 
 Not yet implemented: running the first-session smoke and process-restart
 recovery tests in the multi-OS test job, and an installed-archive
-`lato-cli --version`/`--help` check.
+`lato-cli --version`/`--help` check as a CI step (the real-machine Linux
+install verifies `lato-cli --version` at install time).
 
 Add only targeted jobs or steps:
 
@@ -546,5 +564,37 @@ Phase 5 is complete only when:
   configuration files are removed or migrated.
 - Release, signing, installer, and rollback documentation matches the actual
   implementation.
+
+### Closure status (verified)
+
+All criteria are satisfied for the Linux real-machine scope, with the
+following evidence:
+
+1. Contract: explicit-version, prerelease-only, unsigned, no `latest`; approved
+   through the documented decision trail in this plan and the transformation
+   log.
+2. Artifacts: 12 targets plus `SHA256SUMS`; CI job-validated, then verified
+   against the manifest before upload (`v0.1.0-preview.2` from CI run
+   `41696675487`).
+3. Installers: privately staged replacement in the user install directory;
+   checksum validation fails closed before any installation change; the real
+   update preserved user data.
+4. Runtime: `lato-cli --version` prints the CI-asserted stamp on the Linux
+   real-machine install; `lato-cli --help` works from the same installation.
+5. Provider/session: deterministic provider fixture and process-restart
+   recovery test pass locally (documented in the implementation milestones in
+   this plan).
+6. Honest reporting: README, release notes, and CI label macOS x64 and
+   Windows ARM64 as build-only.
+7. Compatibility: no provider IDs, compatibility paths, credentials, sessions,
+   or configuration files were removed or migrated (archived identities and
+   providers preserved).
+8. Documentation: README installation instructions, release notes, and this
+   plan's rollback/signing notes (unsigned preview, re-run installer to
+   upgrade, no uninstaller) match the shipped behavior.
+
+Ubuntu and Windows CI runtime verification covers the remaining supported
+matrix; Windows and macOS real-machine installer runs remain listed as Phase 6
+hardening follow-ups, not Phase 5 acceptance criteria.
 
 No Phase 5 implementation is authorized by this document.

@@ -584,3 +584,95 @@
 - No commit, push, release, package publication, or compatibility identifier
   change was made. Release publication and native validation require separate
   explicit approval.
+
+## 2026-11-04 - Phase 5 closure: first releases published and validated on a real machine
+
+- Published prereleases `v0.1.0-preview.1` (CI run `41645034351` at commit
+  `3bc5ac9`) and `v0.1.0-preview.2` from `lazyarjun2005-rgb/lato-tui`
+  GitHub Releases; both are marked prerelease and are never marked "latest".
+- Root-caused the development version stamp in the first preview's binaries:
+  the cross-platform workflow injected no version, so
+  `packages/script/src/index.ts` fell back to the dev stamp
+  (`0.0.0-lato-development-<timestamp>`), which `build.ts` froze into the
+  binaries and `InstallationVersion` reports at runtime.
+- Fixed it in commit `c4e7db8` ("Stamp release versions in cross-platform CI
+  builds"): a required `version` dispatch input flows into
+  `OPENCODE_VERSION` for the build jobs, and the verify steps now assert the
+  installed stamp strictly and fail closed, by capturing
+  `lato-cli --version` output, rejecting mismatches with `::error::`, and
+  exiting 1.
+- `v0.1.0-preview.2` was built by dispatched CI run `41696675487` at commit
+  `c4e7db8` (16/16 jobs green). Version assertions passed on Linux x64,
+  x64-baseline, ARM64, glibc and musl, macOS ARM64, and Windows x64 native
+  verification steps, plus musl verification inside Alpine; macOS x64 and
+  Windows ARM64 remain build-only per the documented capability limits, and
+  all 12 artifacts plus the regenerated `SHA256SUMS` came from this run.
+- Published `v0.1.0-preview.2` from those exact CI artifacts (12 archives plus
+  `SHA256SUMS`; ~756 MB downloaded fresh from the run): manifest verified
+  `sha256sum --strict -c` 12/12 before upload; tag `v0.1.0-preview.2` points
+  at `c4e7db8de65ba9673bbba51a86a3a6eecf29a121`; asset-count and prerelease
+  flags verified after upload; post-verification re-downloaded
+  `SHA256SUMS` and `lato-linux-x64-baseline.tar.gz` from the live release and
+  the checksum matched.
+- Windows CI fix from the preview.1 cycle is in place: the PowerShell
+  validation step no longer executes `install.ps1` without its mandatory
+  parameter (cross-platform-build run `41645034351` and later are green).
+- Real-machine validation: the official remote installer (byte-identical to
+  the reviewed repo copy) upgraded the existing preview.1 installation on
+  Arch Linux x64 (no-AVX2, `lato-linux-x64-baseline` target): explicit version
+  accepted, checksum verified, atomic staged replacement,
+  `lato-cli --version` reports `lato 0.1.0-preview.2`, `lato-cli --help`
+  exits 0, and `~/.local/state/lato` user data was untouched.
+- Documentation closure: README now documents real installation commands for
+  `v0.1.0-preview.2` (no more "not available yet" wording), publishes the
+  per-platform real-machine honesty notes, and updates the roadmap; the Phase
+  5 plan's status, guardrails, Milestone 4 and 8 records, and Definition of
+  Done closure mapping were updated; the transformation plan's Phase 5 entry
+  is complete and Phase 6 acceptance criteria were refined against the
+  shipped previews.
+- Phase 5 is marked complete on its documented Linux real-machine scope;
+  Phase 6 hardening remains: Windows/macOS real-machine installer runs,
+  multi-OS CI execution of the smoke/recovery fixtures, signing, uninstaller,
+  packaging/npm decisions, and any future `latest` channel.
+
+## 2026-11-04 - Phase 6: anonymous free-tier removal and TUI branding cleanup
+
+- Investigated the reported "OpenCode 1.18.0 or newer is required to use the
+  free tier" failure. Root cause: the `opencode` models.dev provider
+  (`https://opencode.ai/inference/openai/v1`) serves an anonymous free tier
+  under the literal `apiKey: "public"` when no credential exists
+  (`packages/opencode/src/provider/provider.ts`), and OpenCode's hosted gateway
+  restricts anonymous free-tier access to official OpenCode clients (the error
+  string appears nowhere in this repository; the server compares the
+  `opencode/<channel>/<version>/<client>` user agent, so Lato's real version
+  `0.1.0-preview.2` is rejected). No version spoofing, header fakery, or
+  bypass will be attempted.
+- Implemented the approved Option B in the `opencode` custom loader: without a
+  legitimate credential (env key, `auth.json` entry, or config options apiKey)
+  the loader removes all catalog models and returns `{ autoload: false }`, so
+  keyless installs no longer offer OpenCode-hosted models at all. The loader
+  no longer injects `apiKey: "public"`. Authenticated OpenCode Zen usage is
+  unchanged: a real key keeps the full catalog and all compatibility headers
+  (`x-opencode-session(-id)`, `x-opencode-client`, `x-opencode-project`,
+  `x-opencode-request`, and the `opencode/...` user agent).
+- Preserved everything unrelated: OpenRouter (including `:free` models),
+  Ollama/local providers, custom OpenAI-compatible endpoints, other providers,
+  credentials, configuration, sessions, and databases. Nothing was removed
+  merely because a model id contains "free".
+- Fixed the last TUI branding leak: the sidebar footer brand line was
+  hardcoded as `Open Code` in two places
+  (`packages/tui/src/feature-plugins/sidebar/footer.tsx` and
+  `packages/tui/src/routes/session/sidebar.tsx`) and now renders
+  `Lato <version>` (for example `Lato 0.1.0-preview.2`). The version sources
+  (`props.api.app.version` / `InstallationVersion`) were already correct.
+- Corrected onboarding copy that claimed Lato ships with free models by
+  default: the getting-started panel now explains connecting through
+  `/connect` and calls out OpenRouter's legitimate free models explicitly.
+- Updated the two provider tests that exercised the anonymous loader
+  (`packages/opencode/test/provider/provider.test.ts`): the keyless
+  assertions now expect the `opencode` provider to be absent entirely, the
+  keyed assertions still require paid models with a real credential, and the
+  `paid()` helper tolerates provider absence. Tests are not run locally;
+  GitHub Actions validates.
+- No commit, tag, release, or installed-binary change was made. The changes
+  are staged in the working tree for review and CI validation.

@@ -228,16 +228,22 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         Boolean(yield* dep.auth(input.id)) ||
         Boolean((yield* dep.config()).provider?.["opencode"]?.options?.apiKey)
 
+      // Without a credential, OpenCode's hosted provider only served the
+      // anonymous free tier under the apiKey "public", and that gateway rejects
+      // non-OpenCode clients ("OpenCode 1.18.0 or newer is required to use the
+      // free tier"). Lato reports its own identity, so offer nothing keyless
+      // instead of a model that always fails to server-side eligibility. The
+      // provider reappears with a real Zen API key, env key, or config key.
       if (!ok) {
-        for (const [key, value] of Object.entries(input.models)) {
-          if (value.cost.input === 0) continue
+        for (const [key] of Object.entries(input.models)) {
           delete input.models[key]
         }
+        return { autoload: false }
       }
 
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: ok ? {} : { apiKey: "public" },
+        options: {},
       }
     }),
     openai: () =>

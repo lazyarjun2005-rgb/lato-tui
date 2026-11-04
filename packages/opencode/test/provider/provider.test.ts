@@ -78,7 +78,7 @@ const list = Provider.use.list()
 
 const paid = (providers: Record<string, { models: Record<string, { cost: { input: number } }> }>) => {
   const item = providers[ProviderV2.ID.make("opencode")]
-  expect(item).toBeDefined()
+  if (!item) return 0
   return Object.values(item.models).filter((model) => model.cost.input > 0).length
 }
 
@@ -2091,7 +2091,7 @@ it.instance(
   }),
 )
 
-it.effect("opencode loader keeps paid models when config apiKey is present", () =>
+it.effect("opencode loader hides the anonymous free tier without a key and keeps paid models with a config apiKey", () =>
   Effect.gen(function* () {
     const noneDir = yield* tmpdirScoped()
     const keyedDir = yield* tmpdirScoped({
@@ -2104,15 +2104,12 @@ it.effect("opencode loader keeps paid models when config apiKey is present", () 
         .pipe(provideInstanceEffect(directory))
         .pipe(Effect.provide(instanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
-    const none = paid(yield* listIn(noneDir))
-    const keyedCount = paid(yield* listIn(keyedDir))
-
-    expect(none).toBe(0)
-    expect(keyedCount).toBeGreaterThan(0)
+    expect((yield* listIn(noneDir))[ProviderV2.ID.make("opencode")]).toBeUndefined()
+    expect(paid(yield* listIn(keyedDir))).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
 )
 
-it.effect("opencode loader keeps paid models when auth exists", () =>
+it.effect("opencode loader hides the anonymous free tier without auth and keeps paid models when auth exists", () =>
   Effect.gen(function* () {
     const noneDir = yield* tmpdirScoped()
     const keyedDir = yield* tmpdirScoped()
@@ -2123,7 +2120,7 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
         .pipe(provideInstanceEffect(directory))
         .pipe(Effect.provide(instanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
-    const none = paid(yield* listIn(noneDir))
+    expect((yield* listIn(noneDir))[ProviderV2.ID.make("opencode")]).toBeUndefined()
 
     const authPath = path.join(Global.Path.data, "auth.json")
     const original = yield* Effect.promise(() => Filesystem.readText(authPath).catch(() => undefined))
@@ -2137,9 +2134,6 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
         }),
     )
 
-    const keyedCount = paid(yield* listIn(keyedDir))
-
-    expect(none).toBe(0)
-    expect(keyedCount).toBeGreaterThan(0)
+    expect(paid(yield* listIn(keyedDir))).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
 )

@@ -28,7 +28,7 @@
 
 - Phase 3: primary identity complete. CLI, TUI, app, shared UI, and desktop product identity use Lato. The approved wordmark and icon are integrated into primary logo, splash, favicon, notification, and desktop icon paths.
 - Phase 5: partly complete. Go upsell UI and triggers are removed; Zen is optional and no longer auto-preferred.
-- Phase 6: partly complete. Upstream update feeds and the WSL auto-installer are disabled; distribution identifiers and packaging remain OpenCode-compatible.
+- Phase 6: partly complete. Upstream update feeds and the WSL auto-installer are disabled; the OpenCode-hosted anonymous free tier is no longer offered and the last TUI brand-line leak ("Open Code" footer) is fixed; distribution identifiers and packaging remain OpenCode-compatible.
 - Phase 8: focused validation complete. Full workspace typecheck, web build, desktop packaging, and E2E verification remain deferred.
 - Phase 2.5: safety gates implemented. PR executable fallback, uninstall blocking, hosted UI isolation, installation-service isolation, mDNS compatibility, and CLI snapshot review are complete; package typecheck was attempted but exceeded the five-minute resource limit.
 - Phase 2.75: local validation complete for the CLI/TUI, browser UI, project flow, file operations, command execution, permissions, session persistence, and provider switching. These are development smoke results, not production-build or cross-platform evidence.
@@ -43,7 +43,7 @@
 - Phase 3.9: focused `lato-native-validation` GitHub Actions matrix added for Ubuntu, Windows, and macOS. Its focused identity, state-path, persistence, permission, provider, and runtime tests now pass in CI; the later Phase 4.4/4.5 records document the macOS x64 capability-limited runtime case.
 - Phase 4.4: public command identity is `lato-cli`, internal native binaries remain `lato`/`lato.exe`, and cross-platform build/runtime validation is complete for the supported CI capability matrix. macOS x64 runtime is build-only when Bun lacks AVX on the ARM64 runner.
 - Phase 4.5: final user-facing identity audit completed; safe documentation status updates were made, compatibility/provider/model references were preserved, and unresolved Lato-owned distribution links remain documented.
-- Phase 5: CI archive assembly, checksum-manifest generation and validation, explicit-version installer implementations, installer fixture coverage including darwin zip target selection, a deterministic provider fixture, a first-session smoke test, and a process-restart session recovery test are implemented and locally validated; public release assets, CI execution of the new archive/installer jobs, native installer validation against a real Release, and signing remain unimplemented and require separate release approval.
+- Phase 5: **complete.** CI archive assembly, checksum-manifest generation and validation, explicit-version installers (with the macOS `set -e` defect fixed), installer fixture coverage including darwin zip target selection, a first-session smoke test, a process-restart session recovery test, and CI-installed-stamp assertions are implemented and validated. Prereleases `v0.1.0-preview.1` and `v0.1.0-preview.2` are published from CI-verified assets; `v0.1.0-preview.2` (CI run `41696675487`, commit `c4e7db8`, version-asserted `lato 0.1.0-preview.2` in every runtime-verified target) updated a real Arch Linux x64 (no-AVX2) installation via the official installer, reporting `lato-cli --version` → `lato 0.1.0-preview.2` with user data preserved. Outstanding follow-ups are Phase 6 hardening: Windows/macOS real-machine installer runs, multi-OS execution of the smoke/recovery fixtures in CI, signing, uninstaller, and a future `latest` channel.
 - Remaining identity work: upstream docs/web/console imagery, social cards, non-English locales, and Lato-owned distribution identity.
 - Phase 3.0 ownership and compatibility authority: `LATO_OWNERSHIP_AND_COMPATIBILITY.md`.
 
@@ -94,6 +94,19 @@
 - Audit CLI binary names, package metadata, desktop IDs, protocol schemes, update feeds, CI, Docker, Nix, and extensions.
 - Disable or replace any OpenCode release feed for local Lato builds.
 - Do not publish or invent external endpoints.
+
+Phase 6 acceptance criteria, refined by Phase 5 results (the previews are published, so distribution identity is now concrete):
+
+- Decide Lato-owned package/npm/channel identifiers and publish Lato ownership for installed distribution metadata, while package-level compatibility identifiers (`@opencode-ai/*` scope, provider IDs, `.opencode` engine paths) remain intentionally preserved until a compatibility migration is explicitly approved.
+- Decide and document the globally installed command surface that ships outside this repository: today `lato-cli` from Releases plus the repository-provided `lato` source command; add any new command names only with snapshot updates.
+- Windows and macOS: execute the official installers on real machines, record target selection, checksum verification, and `lato-cli --version`/`--help` results per platform.
+- CI: extend the multi-OS test job to execute the first-session smoke fixture and the process-restart recovery fixture on Linux, Windows, and macOS ARM64; keep macOS x64 and Windows ARM64 explicitly build-only.
+- Keep the explicit-version installer contract and the fail-closed checksum path; add in-place upgrade verification on Windows/macOS (upgrade without data removal).
+- Signing: decide the ownership and plan for macOS notarization and Windows Authenticode; keep prerelease binaries unsigned until that decision executes.
+- Decide whether a `latest` channel is ever introduced; if it is, it must resolve only through the Lato GitHub Releases API.
+- Keep disabled: upstream update feeds and the WSL auto-installer; no invented endpoints.
+- Keep the OpenCode-hosted anonymous free tier off: the `opencode` provider must never load keyless (its loader no longer injects `apiKey: "public"`), and never try to bypass the hosted gateway's anonymous-client eligibility gate by spoofing OpenCode identity; authenticated Zen usage with a real key stays fully supported (recorded 2026-11-04 in the transformation log).
+- Never claim an unexecuted verification, and keep proving released artifacts regenerate from CI, never from developer machines.
 
 ### Phase 7 - Documentation and legal
 
