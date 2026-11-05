@@ -1365,3 +1365,67 @@ handler-local convenience); `lato-cli pr` and git tooling do not import
 default, Zen provider separation, schema/doc-link URL pass, translation
 execution, desktop identity migration, and SDK/OpenAPI naming remain
 documented Phase 7 subphases pending their own approvals.
+
+## 2026-11-05 - Phase 7.2: Config schema doc-link removal (STATUS: implemented, pending review)
+
+Removed the two remaining first-party runtime documentation links that
+directed users to OpenCode docs. No commit, push, or schema-contract change.
+
+### Changes
+
+- `packages/core/src/v1/config/config.ts` `ConfigV1.Info.command` annotation:
+  `"Command configuration, see https://opencode.ai/docs/commands"` ->
+  `"Command configuration"`.
+- `packages/core/src/v1/config/config.ts` `ConfigV1.Info.agent` annotation:
+  `"Agent configuration, see https://opencode.ai/docs/agents"` ->
+  `"Agent configuration"`.
+
+Both are documentation-only schema annotations. Validation behavior, field
+names, keys, defaults, and the wire/JSON shape are unchanged; the removed
+part of the string was non-contractual prose. `ConfigV1` local validation
+(`ConfigParse.schema(ConfigV1.Info, ...)`) ignores descriptions. A repo-wide
+census outside upstream snapshots (`packages/web`, `packages/console`) and
+generated files found no other first-party runtime `opencode.ai/docs`
+references.
+
+### Deliberately neutral wording (no invented destinations)
+
+README.md's existing anchors (`## Configuration`, `## Providers and models`)
+exist and are verifiable, but they document high-level usage rather than the
+config schema fields, and schema annotation strings do not resolve
+repository-relative anchors in editor tooltips, so the links were dropped
+instead of repointed.
+
+### Intentionally preserved
+
+- `https://opencode.ai/config.json` — upstream-hosted compatibility schema
+  default; unchanged (Phase 6 decision, rules 4).
+- `https://opencode.ai/theme.json`, `tui.json`, and desktop theme schema
+  URLs — not touched (rule 5).
+- `packages/sdk/js/src/gen/types.gen.ts` still embeds the old description
+  strings — generated from `@opencode-ai/sdk` types, not regenerated here:
+  no `HttpApi` change was made, so running `bun run generate` from
+  `packages/client` was not applicable (rule 6).
+- `packages/session-ui/src/components/markdown-inline-code-kind.test.ts`
+  uses `https://opencode.ai/docs` as a URL-detection test fixture — not a
+  documentation reference.
+- `packages/tui/internal/config/schema.json` (IDE/editor schema artifact,
+  embedded `$schema` ref string) — untouched.
+
+### Findings deferred (decision needed)
+
+- 21 locale READMEs (README.br/es/ja/ru/bn/vi/de/it/no/tr/bs/zht/fr/da/ko/
+  gr/th/ar/uk/pl/zh.md) each still contain 6-9 OpenCode mentions and direct
+  links to `https://opencode.ai/docs(-agents)`. A link-only fix would leave
+  files that otherwise still read as OpenCode documentation; a full refresh
+  is text-quality work that belongs with the translation-execution subphase.
+  Recommend deferring locale-README cleanup to Phase 7.x (7.5 candidate)
+  rather than half-editing translated files here.
+
+### Validation
+
+- `bun -e` single-process Bun.Transpiler parse of `packages/core/src/v1/
+  config/config.ts` (parse-only, not a typecheck/build).
+- `rg` confirmed no remaining `opencode.ai/docs` hits in first-party runtime
+  sources outside generated files and the session-ui test fixture.
+- `git diff --check`, `git status --short`, full diff inspection.
