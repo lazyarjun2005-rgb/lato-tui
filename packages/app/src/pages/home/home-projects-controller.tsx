@@ -120,7 +120,7 @@ export function createHomeProjectsController(home: HomeController) {
     },
     utility: {
       settings: openSettings,
-      help: () => platform.openExternal("https://opencode.ai/docs"),
+      help: () => platform.openExternal("https://github.com/lazyarjun2005-rgb/lato-tui#readme"),
     },
   }
 }

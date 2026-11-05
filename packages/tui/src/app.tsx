@@ -819,7 +819,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         name: "docs.open",
         title: "Open docs",
         run: () => {
-          openUrl("https://opencode.ai/docs").catch(() => {})
+          openUrl("https://github.com/lazyarjun2005-rgb/lato-tui#readme").catch(() => {})
           dialog.clear()
         },
         category: "System",

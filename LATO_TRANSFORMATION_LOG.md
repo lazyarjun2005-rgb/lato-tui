@@ -675,4 +675,603 @@
   `paid()` helper tolerates provider absence. Tests are not run locally;
   GitHub Actions validates.
 - No commit, tag, release, or installed-binary change was made. The changes
-  are staged in the working tree for review and CI validation.
+  remain uncommitted in the working tree (unstaged) for review and CI
+  validation.
+
+## 2026-11-04 - Phase 6A: user-facing identity cleanup (STATUS: implemented, pending review)
+
+Implemented the approved Phase 6A audit items (A1, A2, A5, A7, A8, A11) from the
+Phase 6 read-only identity audit. Changes remained uncommitted and unstaged in
+the working tree; no
+commit, push, tag, or release was created. Baseline: `lato-development` at
+`d117631` (README rewrite commit), clean working tree before implementation.
+
+- **A1 - TUI documentation URL**
+  `packages/tui/src/app.tsx`: the `docs.open` command now opens
+  `https://github.com/lazyarjun2005-rgb/lato-tui#readme` (the Lato repository
+  README is the current documentation) instead of `https://opencode.ai/docs`.
+  `openUrl` behavior, command key (`docs.open`), label ("Open docs"), and
+  surrounding navigation are unchanged. No other protocol/service URLs touched.
+- **A2 - OAuth success/failure wording** (text-only)
+  `packages/core/src/oauth/page.ts`: user-facing OAuth callback copy now says
+  Lato ("Lato is now connected to …", "Lato is now authorized.", "Lato couldn't
+  finish connecting to …", "Lato couldn't complete authorization.", footnote
+  "…try again from Lato.", document title suffix "… · Lato"). Applied in both
+  the static render path and the same-origin bootstrap script path. OAuth
+  scopes, credentials, tokens, redirect/token handling, providers, and request
+  parameters are unchanged. Intentionally preserved: the header comment
+  crediting the OpenCode visual-language origin (accurate attribution), the
+  SVG wordmark asset and its `aria-label="OpenCode"` (an upstream-derived
+  artwork asset; replacing it requires a real Lato vector, out of text-only
+  scope), and the `oc-*` element ids / `--oc-*` CSS variable names (internal
+  identifiers).
+- **A5 - Provider integration display labels: no code changes needed.**
+  `packages/app/src/i18n/en.ts`: verified remaining `opencode` strings are all
+  accurate external-service or compatibility references —
+  `dialog.provider.opencode.*` labels describe the OpenCode(Zen) provider card
+  (external service; translation keys retained), `provider.connect.opencodeZen.*`
+  correctly names OpenCode Zen and `opencode.ai/zen` (external service), and
+  `dialog.plugins.empty` / `error.chain.checkConfig` reference the
+  `opencode.json` filename (compatibility identifier). WSL onboarding strings
+  were already Lato worded. `packages/core/src/plugin/provider/opencode.ts`:
+  `"OpenCode Console account"`, `integration.name = "OpenCode"`, and the
+  provider log strings accurately name the OpenCode Console/Zen integration
+  (external service); provider ID `opencode`, registry keys, and the API key
+  method labels are compatibility identifiers. No ambiguous string required
+  guessing.
+- **A7 - Built-in customization skill** (filename kept)
+  `packages/core/src/plugin/skill/customize-opencode.md`: the body now says
+  Lato where it refers to the application (# Customizing Lato; config
+  validation, restart guidance, skill/command loaders, built-in agents,
+  permission evaluation, escape-hatch guidance, closing checklist). Added a
+  "Where files live" note documenting Lato's canonical config names and the
+  platform config directory (`~/.config/lato/` on Linux,
+  `~/Library/Application Support/Lato` on macOS, `%APPDATA%\Lato` on Windows,
+  verified in `packages/core/src/global.ts` `latoConfigDir()`) and reordered
+  the apply-changes wording around `lato.jsonc` with `opencode.json` noted as
+  legacy. Retitled the config section "Config file (`lato.jsonc`, legacy
+  `opencode.json`)" and documented the `OPENCODE_*` escape-hatch variables as
+  compatibility names plus the verified `LATO_CONFIG`, `LATO_CONFIG_CONTENT`,
+  and `LATO_CONFIG_DIR` aliases. Intentionally preserved: the legacy
+  `.opencode/...` and `~/.config/opencode/...` path table rows and inline
+  paths (verified legacy-compatible in `packages/opencode/src/config/paths.ts`),
+  the upstream schema URL `https://opencode.ai/config.json` (external service),
+  `@opencode-ai/*` package names and `opencode-*` plugin npm specs, the
+  `OPENCODE_*` environment-variable names, and the registration comment
+  reference to the `CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION` constant; the
+  filename and skill identifiers are unchanged per the compatibility rule.
+- **A8 - Security, contribution, and issue templates**
+  `SECURITY.md`: threat-model prose now names Lato; the report-a-vulnerability
+  tab now points at the Lato repository
+  (`https://github.com/lazyarjun2005-rgb/lato-tui/security/advisories/new`);
+  the upstream `security@anoma.ly` escalation email was removed and replaced
+  with an invented-contact-free follow-up via the Lato issue tracker (without
+  dumping vulnerability details). The inherited AI-generated-report policy,
+  threat model, out-of-scope table, and `OPENCODE_SERVER_PASSWORD`
+  (the actual runtime flag name, verified in
+  `packages/core/src/flag/flag.ts`) are unchanged.
+  `CONTRIBUTING.md`: title/intro/section headings now say Lato; issue-label
+  links point at the Lato repository; dev-vs-production command examples use
+  `bun dev` and the installed `lato-cli` command names (production source
+  `opencode --help` etc. corrected to `lato-cli`); package directories
+  (`packages/opencode`, dist artifact paths), the `@opencode-ai/plugin`
+  package, and the `chore(opencode)` PR scope remain as compatibility
+  identifiers; `./script/generate.ts` reference verified to exist. The
+  models.dev provider-catalog PR link and upstream-derived policy text (issue
+  requirements, PR expectations, style guide) are unchanged.
+  `.github/ISSUE_TEMPLATE/config.yml`: the OpenCode Discord `contact_links`
+  entry was removed (no Lato Discord exists to substitute; `blank_issues_enabled:
+  false` is retained). `.github/ISSUE_TEMPLATE/bug-report.yml`: the version
+  field is now `lato-version` labeled "Lato version". `feature-request.yml`
+  was already clean. No workflow or CI configuration was edited.
+- **A11 - Storybook provider mock branding: no changes needed.**
+  `packages/app/src/components/dialog-select-model-unpaid-v2.stories.tsx` uses
+  the compatibility mock `{ id: "opencode", name: "OpenCode" }` (matches the
+  real integration name; fixture tests OpenCode compatibility),
+  `packages/app/src/components/dialog-connect-provider.stories.tsx` has an
+  `OpenCodeZen` story render for the `opencode` provider (accurate external
+  service), and `packages/storybook/package.json` is the `@opencode-ai/storybook`
+  workspace package name. Per the audit rule these fixtures are not renamed.
+  Note: the tracked stray upstream artifact `packages/storybook/debug-storybook.log`
+  (contains upstream developer paths) was left untouched and is recommended
+  for a separate, explicitly authorized cleanup commit.
+
+- **Compatibility identifiers intentionally preserved** (Categories B/C/D):
+  `opencode`/`opencode-go` provider ids and registry keys, `OPENCODE_*`
+  environment variables (incl. `OPENCODE_SERVER_PASSWORD`), `opencode.json(c)`
+  and `.opencode/` config paths (plus `~/.config/opencode` legacy global),
+  `@opencode-ai/*` package and plugin specs, `opencode.ai/config.json` and
+  `opencode.ai/zen` external URLs, OpenCode Zen/Console service names and
+  labels, the OpenCode OAuth-page wordmark asset, and state/data directory
+  names (`~/.local/share/opencode`).
+- **Validation performed**: targeted text searches and reads of every touched
+  file and neighborhood (`rg`, `sed` reads), classification pass over all
+  remaining `OpenCode`/`opencode` occurrences in `SECURITY.md`,
+  `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/*`, `oauth/page.ts`,
+  `customize-opencode.md`; `git diff --stat`, full `git diff` review,
+  `git diff --check`, and `git status --short`. Prettier was run earlier in
+  the session on README.md only and nothing else; no formatter or test run in
+  this phase.
+- **Validation skipped (laptop resource constraints)**: no tests, no builds,
+  no typechecks (`bun run typecheck`/`bun turbo typecheck` forbidden), no E2E,
+  no dependency installation. TypeScript-heavy behavior checks (OAuth page,
+  skill registration, TUI command metadata) rely on the edits being string
+  literals only; GitHub Actions should be the validator at commit time.
+- All six approved audit items were addressed (five with edits, A5/A11
+  verified as already clean). Remaining identity work beyond this phase
+  stays as previously recorded: B-list service URLs/events, i18n locale
+  refresh, desktop bundle identity, HttpApi/SDK rename, nvidia billing
+  header, packages/web + packages/console upstream snapshots, README polish
+  of legacy-path mentions, and the `packages/storybook/debug-storybook.log`
+  artifact removal (explicit authorization recommended).
+
+## 2026-11-04 - Phase 6B: remaining user-facing identity audit and cleanup (STATUS: implemented, pending review)
+
+Continued Phase 6 identity work on top of the uncommitted Phase 6A changes.
+Baseline HEAD `d117631` (`lato-development`); Phase 6A working-tree changes were
+preserved intact. Phase 6 is still NOT complete: translation refresh,
+desktop/distribution identity, and the service-isolation decisions remain open.
+No commit, push, tag, or release was created.
+
+### Translation audit
+
+- Verified current locale counts: 61 non-English files under
+  `packages/app/src/i18n` contain `OpenCode`; the app i18n total is 2,625
+  occurrences, 2,624 of them in non-English locales (English `en.ts` has a
+  single occurrence, the `provider.connect.opencodeZen.visit.link` value
+  `opencode.ai/zen`, an external-service reference reviewed in Phase 6A).
+  `packages/desktop/src/renderer/i18n` has 61 locale files with 122
+  occurrences, all in non-English locales; English desktop copy is clean
+  (`desktop.updater.none` already says "Lato") and `desktop-native` English
+  defines `desktop.menu.app` as "Lato".
+- The stale strings are translations rendered from pre-rebrand English copy
+  (for example app `desktop.menu.documentation` values still read
+  "OpenCode docs", `desktop.recovery.*` and app onboarding strings still name
+  the application OpenCode, and desktop updater copy still says
+  "OpenCode" in non-English locales).
+- Supported refresh pipeline exists: `script/translate-app.ts` plus
+  `script/translate-app.md` prompt and `.opencode/glossary/<locale>.md`
+  glossaries. It spawns the `opencode` executable (`--pure export`,
+  `models --verbose`) and defaults to the OpenCode-hosted model
+  `opencode/gpt-5.5`, then runs a full per-locale LLM translation session.
+  This is a heavy external-LLM generation process, it depends on the `opencode`
+  binary (not `lato-cli`), and it needs a model that Lato keyless installs no
+  longer provide.
+- Decision: do NOT run the generator locally (laptop constraints and the
+  no-expensive-translation rule) and do NOT hand-edit 2,700+ locale strings.
+  No locale files were modified. Deferred work: downstreamize
+  `script/translate-app.ts` to spawn `lato-cli` and use a Lato-available
+  provider/model, then run per-locale refreshes with the AGENTS.md
+  localization review rules, refreshing English-derived strings only.
+
+### Documentation and link audit
+
+- `packages/app` user-facing help links corrected to the verified Lato
+  repository README (no invented docs site):
+  `src/pages/home/home-projects-controller.tsx` (help link),
+  `src/pages/layout.tsx` (`onOpenHelp`), `src/desktop-menu.ts`
+  (desktop Help → Documentation), `src/components/dialog-custom-provider.tsx`
+  (provider docs link → README `#providers-and-models`),
+  `src/components/settings-v2/general.tsx` and
+  `src/components/settings-general.tsx` (theme "learn more" links).
+  OpenCode Zen links (`https://opencode.ai/zen`) in
+  `dialog-connect-provider.tsx` are external service references and were
+  preserved.
+- `packages/web` is the upstream `@opencode-ai/web` Astro documentation-site
+  snapshot (Astro title "OpenCode", upstream lander assets, upstream docs mdx
+  including the cosmopolis-docs collection). It is not linked from any Lato
+  product surface (README/CLI/TUI/app now point at the Lato repository) and is
+  not built by the Lato release workflows; `.github/workflows/docs-update.yml`
+  is gated to `github.repository == 'sst/opencode'` and stays dormant in this
+  fork. Classified as unlinked upstream content: documented, not rewritten.
+- `packages/console` likewise remains an upstream console snapshot, not built
+  or deployed by Lato CI; unchanged.
+- Root docs: user-facing files were already handled in Phase 6A;
+  `CONTEXT.md` (internal runtime architecture terminology such as "OpenCode
+  Client"/"Embedded OpenCode"), `AGENTS.md`, and the historical `LATO_*`
+  documents are internal/historical and were preserved.
+
+### Changelog / highlights
+
+- The previous audit's `packages/app/src/context/highlights.tsx` finding is
+  already resolved: the changelog source is now
+  `import.meta.env.VITE_LATO_CHANGELOG_URL` (default undefined, guarded before
+  fetch), and no `opencode.ai/changelog` reference exists anywhere in the
+  repository. No Lato users fetch upstream release notes; the generic
+  highlight/release-notes UI still works when a Lato-owned URL is configured
+  later. No change needed; no endpoint invented.
+
+### Installer and updater audit
+
+- Active update paths are already disabled: `src/cli/upgrade.ts` returns no
+  upgrade check, the TUI `createUpdater` source is a no-op whose `apply`
+  throws "Updates are not available in this Lato build", and
+  `lato-cli upgrade` prints "Self-upgrade is not available in this Lato
+  development build." (verified in Phase 6/6A on the installed preview.3).
+- `packages/opencode/src/installation/index.ts` still contains upstream
+  OpenCode install URLs (`https://opencode.ai/install`, `/v2/install`,
+  `MAJOR_INSTRUCTIONS`) and OpenCode-2 upgrade messaging, but those network
+  paths are not reachable from the shipped CLI (no upgrade command import);
+  classified as inactive upstream-only code and left untouched rather than
+  deleting behavior outside this phase. The upstream update feed is not
+  re-enabled and no Lato update server was invented.
+
+### GitHub agent integration
+
+- `lato-cli github` is a visible command that installs the OpenCode-hosted
+  GitHub app: it queries
+  `https://api.opencode.ai/get_github_app_installation` (github.handler.ts:324)
+  and defaults the OIDC token exchange base to `https://api.opencode.ai`
+  (:677), sending repository owner/repo to OpenCode infrastructure. It cannot
+  be used end-to-end as a Lato-owned service, but disabling/hiding the command
+  or replacing the endpoint is a service-isolation decision, and changing the
+  endpoint would break the OpenCode-hosted app flow without a Lato replacement.
+  Only the user-facing label was clarified ("Learn more about the OpenCode
+  GitHub agent"); request behavior, headers, and endpoints are unchanged.
+  Deferred to the distribution/service-isolation phase with a recommendation
+  to decide whether to disable/hide the command.
+
+### Residual user-facing branding
+
+- `packages/opencode/src/cli/cmd/providers.ts`: the `opencode` provider login
+  hint now says "Create an OpenCode Zen API key at https://opencode.ai/zen"
+  (the verified in-app Zen key URL; previously `/auth`), and the Cloudflare AI
+  Gateway hint now links Cloudflare's official provider documentation instead
+  of the OpenCode docs site. Provider IDs, auth behavior, and request
+  parameters unchanged.
+- Built-in `/init` command templates (both live copies:
+  `packages/core/src/plugin/command/initialize.txt` and
+  `packages/opencode/src/command/template/initialize.txt`): "future OpenCode
+  sessions" → "future Lato sessions"; the config source example now names
+  `lato.jsonc` with legacy `opencode.json` noted; the `instructions` mention is
+  now file-agnostic. Prompt structure and every other instruction preserved.
+- `packages/opencode/src/cli/cmd/github.handler.ts`: the next-steps docs link
+  is labeled as the OpenCode GitHub agent (external-service accuracy).
+
+### Compatibility and external-service references preserved
+
+Provider IDs `opencode`/`opencode-go`, `OPENCODE_*` environment variables,
+`opencode.json(c)` and `.opencode/` compatibility paths, `@opencode-ai/*`
+packages and plugin specs, OpenCode Zen/Console service names and URLs,
+`opencode.ai/config.json` and `desktop-theme.json` schema URLs, the marked
+markdown theme id "OpenCode", the OAuth-page wordmark asset, protocol/state
+identifiers (`opencode://`, `~/.local/share/opencode`), desktop `APP_IDS`
+(`ai.opencode.desktop*`), `packages/console`/`packages/web` package names, and
+request headers (`HTTP-Referer`, `X-BILLING-INVOKE-ORIGIN`, `x-opencode-*`)
+known to be behavior-relevant were all preserved. No provider IDs, auth
+behavior, API request behavior, generated SDK/OpenAPI files, desktop bundle
+IDs, or user data/config files were changed.
+
+### Validation
+
+- Static inspection only: targeted `rg` classification passes over
+  `packages/app/src`, `packages/desktop/src`, `packages/ui/src`,
+  `packages/core/src`, `packages/opencode/src` (source, prompts, templates,
+  CLI commands, installation/updater, GitHub handler), translation-script
+  inspection, docs/workflow inspection, `git status --short`, `git diff`,
+  `git diff --stat`, and `git diff --check`.
+- Skipped (laptop constraints): tests, typechecks, builds, Turbo, E2E,
+  dependency installation, and the translation generator. No formatter run in
+  this phase.
+
+### Remaining unresolved (Phase 6 not complete)
+
+- Non-English app/desktop locale refresh via a downstreamized translation
+  pipeline (highest remaining user-visible branding gap).
+- Desktop/distribution identity: `ai.opencode.desktop*` app ids, Linux
+  `.desktop` resource artifacts, and installer identity remain OpenCode-named
+  by design until an approved migration.
+- GitHub agent service isolation decision (disable/hide vs replace endpoint).
+- Upstream `packages/web`/`packages/console` documentation and console content
+  (unlinked snapshots) and their imagery/social cards.
+- HttpApi/SDK/OpenAPI naming, nvidia `X-BILLING-INVOKE-ORIGIN`, provider
+  `HTTP-Referer` values, and the `packages/storybook/debug-storybook.log`
+  tracked artifact cleanup all remain deferred as previously recorded.
+
+## 2026-11-05 - Phase 6C: remaining identity decisions and safe groundwork (STATUS: implemented, pending review)
+
+Continued Phase 6 on top of the uncommitted Phase 6A/6B changes (all 19 files
+preserved intact). Baseline HEAD `d117631` (`lato-development`). Investigation
+was read-only except for one safe groundwork edit and the transformation
+documents. No commit, push, tag, or release was created.
+
+### GitHub agent service isolation
+
+- Registration and visibility: `GithubCommand` is registered unconditionally at
+  `packages/opencode/src/index.ts:18,101`, so `lato-cli github` (with
+  `install` and `run` subcommands) is visible in CLI help and enabled by
+  default. No feature flag or config option gates it.
+- OpenCode-hosted service dependencies:
+  - `github install` polls
+    `https://api.opencode.ai/get_github_app_installation?owner=<owner>&repo=<repo>`
+    (github.handler.ts:324) with up to 120 one-second retries, sending the
+    repository owner/name to OpenCode infrastructure, and opens
+    `https://github.com/apps/opencode-agent` (:288) — the OpenCode GitHub App.
+    The generated workflow (`.github/workflows/opencode.yml`) runs
+    `anomalyco/opencode/github@latest` (:366) and reacts to `/oc`/`/opencode`
+    comment mentions; the bot identity is `opencode-agent[bot]` (:142).
+  - `github run` (GitHub Action entry point) exchanges GitHub OIDC tokens or
+    personal access tokens against
+    `${oidcBaseUrl}/exchange_github_app_token[_with_pat]` (:977-984), sending
+    the token plus `{owner, repo}` to OpenCode infrastructure; the default
+    base is `https://api.opencode.ai` (:677).
+- Existing safe mechanism found: none. A pure-GitHub path exists in `github
+  run` (`USE_GITHUB_TOKEN=true` uses `GITHUB_TOKEN` directly, no OpenCode
+  infrastructure, :468-479) and the OIDC base is env-overridable
+  (`OIDC_BASE_URL`, :675-679), but `github install` has no such escape and no
+  registry/config flag exists to hide either subcommand.
+- Impact of disabling on unrelated GitHub functionality: none. The shared
+  helpers (`extractResponseText`, `formatPromptTooLargeError`) are consumed
+  only by `github.handler.ts` and re-exported from `github.ts`;
+  `parseGitHubRemote` canonically lives in `packages/opencode/src/util/repository.ts`
+  and `lato-cli pr` does not import `github.shared`; git tooling and the `pr`
+  command are unaffected.
+- Recommendation (deferred, needs approval): neutralize `github install` with
+  an explicit terminal notice (same pattern as the approved `lato-cli upgrade`
+  stub, "requires OpenCode-hosted services") because it makes OpenCode network
+  calls and installs a foreign GitHub App; keep `github run` available because
+  it is the CI-side entry point, already works without OpenCode infrastructure
+  via `USE_GITHUB_TOKEN=true`, and stays `OIDC_BASE_URL`-ready for future
+  Lato-owned token exchange. Do not remove commands silently. Replace
+  endpoints only when Lato-owned infrastructure exists.
+
+### Desktop/distribution identity audit
+
+Classifications (no changes made):
+
+- Product branding — already Lato: `productName` "Lato"/"Lato Dev"/"Lato Beta",
+  Linux `.desktop` `Name=Lato`, `Exec=/opt/Lato/<appId>`, metainfo names and
+  summaries, protocol display names ("Lato", "Lato Beta"), icons, and menu
+  wiring.
+- Platform identity — OpenCode-named by design, no change: app ids
+  `ai.opencode.desktop{,.dev,.beta}` (APP_IDS in
+  `electron-builder.config.ts`, which drive executableName, StartupWMClass,
+  the `.desktop` file basename, Icon name, AppUserModelId, macOS bundle id,
+  and the metainfo component id/launchable), installer artifact
+  `opencode-desktop-${os}-${arch}.${ext}`, deb/rpm package names
+  `opencode`/`opencode-dev`/`opencode-beta`, deep-link scheme `opencode://`
+  (`app.setAsDefaultProtocolClient("opencode")` at `main/index.ts:271`), and
+  the kept-hidden legacy `opencode-desktop.desktop` entry that lets upstream
+  GNOME/KDE pins keep resolving.
+- Migration-sensitive user data — no change: `userData` is
+  `join(app.getPath("appData"), appId)` (`main/index.ts:125,144-145`), i.e.
+  `~/.config/ai.opencode.desktop[.dev]` on Linux,
+  `%APPDATA%\ai.opencode.desktop[.dev]` on Windows, and
+  `~/Library/Application Support/ai.opencode.desktop[.dev]` on macOS. The
+  core CLI state directory `~/.local/share/opencode` is also untouched.
+- Updater/feed status: the desktop auto-updater is disabled by default via
+  `UPDATER_ENABLED = process.env.LATO_UPDATER_ENABLED === "1" && app.isPackaged
+  && CHANNEL !== "dev"` (`main/constants.ts`), and the electron-builder
+  config contains no `publish` block, so no update feed URL is embedded; the
+  `electron-updater` wiring exists but has no feed. Root
+  `install.sh`/`install.ps1` remain Lato-branded with no OpenCode URLs.
+- Upstream-only inactive distribution code — preserved, not run on Lato:
+  `.github/workflows/publish.yml` (triggers only on the `v1` branch, which
+  does not exist here) builds `opencode-desktop-*` release assets for the
+  upstream release flow; `docs-update.yml` stays `sst/opencode`-gated;
+  `nix/desktop.nix` names are inert without a Nix release.
+
+Migration plan (recommendation only; NOT implemented in this phase):
+
+- Current identifier/path: app id `ai.opencode.desktop{,.dev,.beta}` (also
+  Linux `.desktop` basename, Icon/StartupWMClass, metainfo id, Windows
+  AppUserModelId, macOS bundle id) and `userData` =
+  `<appData>/ai.opencode.desktop[.dev|.beta]`.
+- Desired Lato identifier/path: a Lato app id (to be chosen — e.g.
+  `x.y.lato.desktop` or a domain
+  Lato controls) and `userData` = `<appData>/<lato-appid>`.
+- Migration method: bump the app id in `electron-builder.config.ts` APP_IDS +
+  metainfo generation + Linux resource file together; in `main/index.ts`
+  set `userData` to the new directory; on startup, if the new directory is
+  empty and the old `ai.opencode.desktop[.dev|.beta]` directory exists,
+  copy/move its contents (draft store, windows state, updater-ready record)
+  into the new directory, then remove the old directory only after a
+  successful copy; register the new platform identities (Linux desktop file/
+  icon names, Windows AppUserModelId, macOS bundle id) from the same appId
+  constant so launcher and data paths stay consistent.
+- Compatibility period: keep the old hidden
+  `opencode-desktop.desktop` entry pattern and, where feasible, a
+  compatibility import for at least one release cycle; keep the
+  `opencode://` deep-link scheme registered alongside a future `lato://`
+  scheme until inversion can be coordinated.
+- Rollback behavior: ship the previous version and keep the old directory
+  until deletion succeeds; the copy step is idempotent, so re-running the old
+  version continues to work against the old directory (old version keeps
+  reading/writing the old paths; it should not be deleted before the new
+  version has validated the migration).
+- Risks: duplicate installed apps if only some identifiers change ( appId and
+  package names must move together); data loss if the copy step is skipped on
+  interrupted upgrades (mitigate by validating checksums before removing);
+  protocol re-registration on Windows/macOS may require user confirmation;
+  Linux launcher pins (GNOME/KDE) keyed on the old .desktop/Icon names break
+  silently unless the legacy hidden entry is kept for one cycle.
+- Required before release: not required for preview.3-style CLI previews (the
+  desktop app is not yet released as Lato-signed); required before the first
+  Lato-branded desktop installer so Lato never ships a machine identity that
+  subsequently has to carry OpenCode data forward.
+
+### Translation pipeline groundwork
+
+Findings (no generation was run and no locale files were modified):
+
+- `script/translate-app.ts` spawns the `opencode` executable three ways:
+  `opencode --pure run ...` (:428-453), `opencode --pure export <id>
+  --sanitize` (:462), and `opencode --pure models <provider> --verbose`
+  (:534), with the default model `opencode/gpt-5.5` and variant `xhigh`
+  (:91-92). Session identity and model enforcement are verified from the
+  exported session (`sessionModels`, :167-182, 477-488).
+- The spawned CLI is the same binary family shipped as `lato-cli` (the repo's
+  `packages/opencode` CLI exposes `--pure` at `src/index.ts:64`, and
+  `lato-cli export --help` confirmed the same command surface), so migrating
+  the invoked executable is code-level compatible; only the model/provider
+  choice and env alias handling are open decisions.
+- Isolation for child sessions deletes `OPENCODE_CONFIG`,
+  `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PERMISSION`,
+  and `OPENCODE_AUTO_SHARE` (:548-556) and injects
+  `OPENCODE_CONFIG_CONTENT` with `$schema: https://opencode.ai/config.json`,
+  `share: disabled`, and formatter/lsp/snapshot off (:197-222, 419-426).
+- Root cause of the 61-locale staleness: `script/translate-app.md` instructed
+  translators to "preserve [the] technical term ... OpenCode", and the
+  per-locale glossaries under `.opencode/glossary/` list `OpenCode` as the
+  product name for each language, so every regeneration would reinsert the
+  old brand.
+- Safety rails already built into the pipeline: drift detection (missing,
+  extra, placeholder-mismatched keys), a worktree snapshot that fails the run
+  if any file outside the locale's target files changed, a post-run `--check`
+  re-invocation, and renderer/`ui`/desktop domain scoping per locale.
+
+Implemented groundwork (safe, no LLM cost):
+
+- `script/translate-app.md`: the product-term instruction now reads "preserve
+  `Lato` (the product name; never translate or inflect it)" and lists the
+  external service names `OpenCode Zen` and the OpenCode GitHub agent as the
+  strings that must stay "OpenCode". This prevents the next-generation run
+  from re-OpenCoding the product name; no other behavior changed and the
+  script's Bun test suite asserts functions, not prompt content.
+- No locale files, glossaries, or script code were modified.
+
+Translation migration plan (NOT executed in this phase):
+
+- CLI executable: spawn `lato-cli` instead of `opencode` (identical command
+  surface, verified above), ideally via an overridable environment variable
+  or CLI flag so CI and local runs can pin the binary; delete the LATO_*
+  alias env vars alongside the OPENCODE_* ones in `isolatedEnvironment()`
+  once the child is guaranteed to be Lato.
+- Provider/model defaults: do not invent one. Keep the `--model` flag
+  functional and leave the default decision to an approved provider
+  verification; the pipeline already fails closed when the configured model
+  is not usable (`resolveModelVariant` raises before any generation).
+- Product terminology and compatibility wording: the updated prompt covers
+  Lato as the preserved product term and OpenCode only for external service
+  names; also refresh `.opencode/glossary/<locale>.md` terminology sections
+  (61 files) to declare `Lato` as the product term before regeneration.
+- Locale batching: keep per-locale sessions; the pool-based concurrency
+  (`--concurrency`, default 4) already isolates failures per locale.
+- Review process: run per-locale generation with repository review rules
+  (agent session only edits the three target dictionary files for its
+  locale; permission config denies everything else), then human review of
+  the diff for a sample of locales before merging (per AGENTS.md
+  localization rules).
+- Validation: `--check` mode (exit 1 on drift) and the built-in
+  unexpected-changes guard run automatically after generation; add `git diff
+  --check` on locale files after each run.
+- Rollback: all changes are plain file edits; `git restore` of the locale
+  files (or abort before commit) reverts any locale; sessions that fail the
+  model-verification or check steps are discarded wholesale.
+- Cost: the default `all` run is 61 locales × one agent session each; the
+  run must be authorized explicitly and is out of scope for this phase.
+
+### Residual identity classifications
+
+- External provider/API contract — preserved (billing/attribution contracts
+  with third-party gateways are not verified, so headers stay untouched):
+  `HTTP-Referer: https://opencode.ai/` and `X-Title: opencode` where they
+  identify the originating integration — llmgateway
+  (`provider.ts:513-515`, plus `X-Source: opencode`), openrouter (:524-526),
+  nvidia (:534-536, plus `X-BILLING-INVOKE-ORIGIN: "OpenCode"`), vercel
+  (:545-547), zenmux (:650-652), kilo (:956-958), and the nvidia plugin
+  override (`packages/core/src/plugin/provider/nvidia.ts:14-15`).
+- Compatibility/generated identifiers — preserved: `@opencode-ai/sdk`
+  package name and its generated `openapi.json`/client exports
+  (`OpenCode`, `OpenCodeClient`, `OpenCodeEvent`,
+  `OpenCodeAssistantMessage`), the `OpenCodeHttpApi` symbol that feeds the
+  generated OpenAPI spec (renaming requires regeneration and is deferred
+  with approval), the registered markdown theme id `OpenCode`
+  (`packages/ui/src/context/marked-theme*.tsx` — internal theme registry
+  key, user-invisible), `$schema: https://opencode.ai/config.json` defaults
+  (user config compat), `~/.local/share/opencode` state directories, and
+  the `opencode://` protocol.
+- Upstream-only inactive code — preserved and documented: `packages/web`
+  (Astro docs site titled "OpenCode"), `packages/console`,
+  `publish.yml`/`release-github-action.yml`/`docs-update.yml` (branch- or
+  repo-gated to upstream), `.github/workflows/opencode.yml`, and Nix
+  packaging names.
+- Historical documentation — preserved: `LATO_*` transformation documents,
+  `CONTEXT.md` (internal architecture terminology), `AGENTS.md` developer
+  docs, and the upstream pull-request references inside translation
+  glossaries.
+- Stray artifact — preserved (explicitly not deleted):
+  `packages/storybook/debug-storybook.log` is a tracked debug log with
+  upstream development content inside `packages/storybook`. Recommendation:
+  remove it from git tracking (git rm --cached + .gitignore entry) in a
+  separate authorized housekeeping commit, not in this phase.
+- Internal code comments referencing OpenCode (for example
+  `provider/transform.ts:714`, `:1596`, `config/managed.ts:10`,
+  `acp/usage.ts` SDK alias rename only — type identities from
+  `@opencode-ai/sdk`, and the OpenCode-only notes in
+  `config/v2-compat.ts`) are developer-facing documentation inside the
+  codebase, not user-visible; preserved.
+
+### Validation
+
+- Static inspection only: `git status --short`, `git diff`, `git diff
+  --stat`, `git diff --check`, and targeted `rg` passes over
+  `packages/core/src`, `packages/opencode/src` (CLI registration and github
+  command), `packages/desktop` (electron-builder config, resources, main
+  process userData/updater/protocol wiring, metainfo generator),
+  `script/translate-app.ts`, `script/translate-app.md`,
+  `script/translate-app.test.ts`, `.opencode/glossary/`, `.github/workflows`
+  (branch gating), and `packages/{app,ui}/src` residual-string census.
+- No builds, tests, typechecks, Turbo tasks, E2E suites, dependency
+  installation, or translation generation were executed.
+
+### Remaining Phase 6 blockers
+
+- Non-English locale refresh (61 app locales + 61 desktop locales) — blocked
+  on an approved provider/model choice and the lato-cli executable swap, per
+  the migration plan above; the translation-prompt groundwork is in place.
+- Desktop/distribution identity (`ai.opencode.desktop*` ids, package names,
+  artifact names, legacy `.desktop` entry, `opencode://` scheme pairing,
+  userData migration) — requires the migration plan above; user-data copy
+  semantics need an approved design before any identifier change.
+- Github `install` neutralization (upgrade-stub pattern) and eventual
+  GitHub-agent replacement — behavioral change requiring approval.
+- Provider attribution/billing headers, SDK/OpenAPI naming, nvidia billing
+  origin, upstream web/console rebranding, and the storybook artifact
+  cleanup remain deferred as previously recorded (contract- or
+  approval-gated).
+
+## 2026-11-05 - Phase 6C addendum: config-documentation verification and corrections
+
+Read-only verification session followed by minimal documentation corrections,
+both continuing Phase 6C (no commit, push, tag, release). All changes remained
+unstaged in the working tree. Verified against the implementation:
+
+- `lato.jsonc`/`lato.json` are accepted as project (root and walk-up),
+  `.lato/lato.json(c)` directory files, and global files in the platform
+  config directory (`packages/opencode/src/config/paths.ts:17-27,50-59,70-87`,
+  `packages/opencode/src/config/config.ts:272,436-437`,
+  `packages/core/src/config.ts:144,187,194,200-223`), with legacy
+  `opencode.json(c)` everywhere alongside.
+- Global config directories verified exactly in
+  `packages/core/src/global.ts:94-103`: Linux `~/.config/lato` (or
+  `$XDG_CONFIG_HOME/lato`), macOS `~/Library/Application Support/Lato`,
+  Windows `%APPDATA%\Lato`; legacy global `~/.config/opencode`
+  (`global.ts:14`).
+- `LATO_CONFIG`, `LATO_CONFIG_CONTENT`, and `LATO_CONFIG_DIR` are implemented
+  and consumed (`packages/core/src/flag/flag.ts:70-78`,
+  `packages/opencode/src/config/config.ts:404-409,671,493-500`,
+  `packages/core/src/global.ts:63`); `OPENCODE_*` remain the primary names.
+- `https://opencode.ai/config.json` is used as the `$schema` default and
+  editor recommendation, and is an upstream OpenCode-hosted compatibility
+  schema: Lato never fetches it (validation is local via
+  `ConfigParse.schema(ConfigV1.Info, ...)`), and it is served by the upstream
+  docs-site postbuild (`packages/opencode/script/schema.ts`,
+  `packages/web/astro.config.mjs:320-322`), not by any Lato infrastructure.
+
+Applied corrections (packages/core/src/plugin/skill/customize-opencode.md only):
+
+- Documented the schema URL as the upstream OpenCode-hosted compatibility
+  schema (not a Lato-owned schema) and warned against inventing a
+  Lato-schema URL.
+- Reworded the escape-hatch parenthetical: `OPENCODE_*` names stay supported
+  for compatibility and the `LATO_CONFIG`/`LATO_CONFIG_CONTENT`/
+  `LATO_CONFIG_DIR` aliases are implemented too.
+- Listed canonical global `lato.jsonc`/`lato.json` files explicitly and added
+  the `$XDG_CONFIG_HOME/lato` override and the nuance that a home-level
+  `~/.opencode/` directory's `opencode.json` files are still loaded even
+  though it is not the global config location.
+
+Also fixed the earlier log wording that incorrectly said Phase 6A/6 changes
+were "staged" — they were unstaged working-tree changes throughout; the git
+index was empty until the Phase 6 finalize turn.

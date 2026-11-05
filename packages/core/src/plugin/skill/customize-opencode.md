@@ -5,9 +5,9 @@
   skill's content.
 -->
 
-# Customizing opencode
+# Customizing Lato
 
-opencode validates its own config strictly and refuses to start when a field
+Lato validates its own config strictly and refuses to start when a field
 is wrong. The shapes below cover the common surface area, but they are a
 **summary, not the source of truth**.
 
@@ -20,26 +20,40 @@ defaults, and descriptions — lives in the published JSON Schema:
 
 If a field is not documented in this skill, or you need to confirm an exact
 shape before writing config, **fetch that URL and read the schema directly**
-rather than guessing. opencode hard-fails on invalid config, so the cost of a
+rather than guessing. Lato hard-fails on invalid config, so the cost of a
 wrong shape is a broken startup.
 
-Independently, every `opencode.json` should declare
+Independently, every project config should declare
 `"$schema": "https://opencode.ai/config.json"` so the user's editor catches
-mistakes as they type.
+mistakes as they type. Note: that URL is the upstream OpenCode-hosted
+compatibility schema — Lato does not host its own schema. Lato validates
+config locally against the same shape at startup; do not invent a
+Lato-schema URL.
 
 ## Applying changes
 
-Config is loaded once when opencode starts and is not hot-reloaded. After
-saving changes to `opencode.json`, an agent file, a skill, a plugin, or any
-other config-time file, **tell the user to quit and restart opencode** for
-the changes to take effect. The running session will keep using the
-already-loaded config until then.
+Config is loaded once when Lato starts and is not hot-reloaded. After
+saving changes to `lato.jsonc` (or legacy `opencode.json`), an agent file, a
+skill, a plugin, or any other config-time file, **tell the user to quit and
+restart Lato** for the changes to take effect. The running session will keep
+using the already-loaded config until then.
 
 ## Where files live
 
+Lato's canonical names are `lato.jsonc`/`lato.json` — project config
+(project root or `.lato/lato.jsonc`) and global config (`lato.jsonc` or
+`lato.json` inside the platform config directory: `~/.config/lato/` — or
+`$XDG_CONFIG_HOME/lato` when `XDG_CONFIG_HOME` is set — on Linux,
+`~/Library/Application Support/Lato` on macOS, `%APPDATA%\Lato` on Windows).
+All the paths in the table below remain legacy-compatible and keep working
+(including a home-level `~/.opencode/` directory containing
+`opencode.json`, whose files Lato still loads when present even though it
+is not the global config location); prefer the Lato-named paths for new
+setups.
+
 | Scope                         | Path                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.opencode/opencode.json` (opencode walks up from the cwd to the worktree root) |
+| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.opencode/opencode.json` (Lato also walks up from the cwd to the worktree root) |
 | Global config                 | `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc` (NOT `~/.opencode/`)                            |
 | Project agents                | `.opencode/agent/<name>.md` or `.opencode/agents/<name>.md`                                                               |
 | Global agents                 | `~/.config/opencode/agent(s)/<name>.md`                                                                                   |
@@ -50,9 +64,9 @@ already-loaded config until then.
 | External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
-top-level keys in `opencode.json` are rejected with `ConfigInvalidError`.
+top-level keys in the loaded config are rejected with `ConfigInvalidError`.
 
-## opencode.json
+## Config file (`lato.jsonc`, legacy `opencode.json`)
 
 Every field is optional.
 
@@ -160,7 +174,7 @@ Shape notes worth being explicit about:
 
 ## Skills
 
-opencode's skill loader scans for `**/SKILL.md` inside skill directories. The
+Lato's skill loader scans for `**/SKILL.md` inside skill directories. The
 file is named `SKILL.md` exactly, and lives in its own folder named after the
 skill:
 
@@ -276,13 +290,13 @@ file, `disable: true` in frontmatter.
 
 ### Built-in agents
 
-opencode ships with `build`, `plan`, `general`, `explore`. Hidden internal agents:
+Lato ships with `build`, `plan`, `general`, `explore`. Hidden internal agents:
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`.
 
 ## Commands
 
-opencode's command loader scans for `**/*.md` inside command directories. The
+Lato's command loader scans for `**/*.md` inside command directories. The
 file is named after the command, and lives directly inside the `command` folder:
 
 ```
@@ -298,10 +312,10 @@ agent: build
 model: anthropic/claude-sonnet-4-6
 ---
 
-(command body in markdown: the prompt opencode runs, with $ARGUMENTS for the user's input)
+(command body in markdown: the prompt Lato runs, with $ARGUMENTS for the user's input)
 ```
 
-- `template` is the command body — everything below the frontmatter — and is required: it is the prompt opencode runs when the command is invoked. Do not also put a `template:` key in the frontmatter.
+- `template` is the command body — everything below the frontmatter — and is required: it is the prompt Lato runs when the command is invoked. Do not also put a `template:` key in the frontmatter.
 - `$ARGUMENTS` is replaced with everything the user typed after the command; `$1`, `$2`, … pull individual positional arguments.
 - Optional: `description`, `agent`, `model`, `variant`, `subtask`.
 
@@ -404,7 +418,7 @@ Actions: `"allow"`, `"ask"`, `"deny"`.
 
 Per-tool value forms: `"allow"` shorthand (treated as `{"*": "allow"}`), or an
 object `{ pattern: action }`. Within an object, **insertion order matters**.
-opencode evaluates the LAST matching rule, so put broad rules first and narrow
+Lato evaluates the LAST matching rule, so put broad rules first and narrow
 rules last.
 
 `permission: "allow"` (a string at the top level) is shorthand for "allow
@@ -424,10 +438,12 @@ the `plan` agent's permission ruleset (`edit: deny *`).
 
 ## Escape hatches
 
-When a user's config is broken and opencode won't start, these env vars help:
+When a user's config is broken and Lato won't start, these env vars help
+(Lato honors the `OPENCODE_*` names for compatibility, and the `LATO_CONFIG`,
+`LATO_CONFIG_CONTENT`, and `LATO_CONFIG_DIR` aliases are implemented too):
 
-- `OPENCODE_DISABLE_PROJECT_CONFIG=1`: skip the project's local `opencode.json`
-  and start from globals only. Run from the project directory, opencode loads,
+- `OPENCODE_DISABLE_PROJECT_CONFIG=1`: skip the project's local config files
+  and start from globals only. Run from the project directory, Lato loads,
   the user edits the broken file, then they restart without the flag.
 - `OPENCODE_CONFIG=/path/to/file.json`: load an additional explicit config.
 - `OPENCODE_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json"}'`:
@@ -445,9 +461,9 @@ When a user's config is broken and opencode won't start, these env vars help:
   `https://opencode.ai/config.json` and read the schema rather than guessing.
 - Preserve `$schema` and any existing fields the user did not ask to change.
 - For agent, command, skill, and plugin definitions, prefer creating new files
-  in the correct location over inlining everything in `opencode.json`.
+  in the correct location over inlining everything in the project config file.
 - If the user's existing config is malformed, point them at the env-var escape
-  hatches above so they can edit from inside opencode without breaking their
+  hatches above so they can edit from inside Lato without breaking their
   session.
-- After saving any config change, remind the user to quit and restart opencode
+- After saving any config change, remind the user to quit and restart Lato
   — running sessions keep using the already-loaded config.

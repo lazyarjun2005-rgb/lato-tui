@@ -279,7 +279,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "help",
     labelKey: "desktop.menu.help",
     items: [
-      { type: "item", labelKey: "desktop.menu.documentation", href: "https://opencode.ai/docs" },
+      { type: "item", labelKey: "desktop.menu.documentation", href: "https://github.com/lazyarjun2005-rgb/lato-tui#readme" },
       { type: "item", labelKey: "desktop.menu.exportLogs", command: "logs.export" },
     ],
   },
