@@ -1275,3 +1275,93 @@ Applied corrections (packages/core/src/plugin/skill/customize-opencode.md only):
 Also fixed the earlier log wording that incorrectly said Phase 6A/6 changes
 were "staged" — they were unstaged working-tree changes throughout; the git
 index was empty until the Phase 6 finalize turn.
+
+## 2026-11-05 - Phase 7.1: GitHub agent install scaffold removed (STATUS: implemented, pending review)
+
+Converted `lato-cli github install` from the OpenCode-hosted installer into an
+explanatory stub. No commit, push, tag, or release was made; the change is
+unstaged in the working tree for review.
+
+### What was removed
+
+- `packages/opencode/src/cli/cmd/github.handler.ts`: the entire
+  `githubInstall` scaffold no longer runs. Previously it used `InstanceRef`,
+  `ModelsDev`, and `Git` services, opened
+  `https://github.com/apps/opencode-agent` in a browser, polled
+  `https://api.opencode.ai/get_github_app_installation?owner=<owner>&repo=<repo>`
+  for up to 120 seconds (sending repository owner/name to OpenCode
+  infrastructure), and wrote `.github/workflows/opencode.yml` invoking
+  `anomalyco/opencode/github@latest` with `/oc`/`/opencode` mention triggers.
+  None of that happens anymore: the stub only prints an explanation.
+- Imports that existed only for the installer were removed:
+  `Filesystem` (workflow-file writes), `ModelsDev` (provider/model prompts),
+  `parseGitHubRemote` (origin parsing), `map/pipe/sortBy/values` from
+  `remeda`, and `exec` from `child_process` (browser opening).
+  The `WORKFLOW_FILE` constant was removed together with the scaffold; the
+  history of what it used to write is preserved in the comment above the stub
+  and in this log.
+
+### New stub behavior
+
+`lato-cli github install` now prints, via the same `UI`/`prompts` presentation
+used elsewhere in the CLI:
+
+- Lato does not currently support installing the OpenCode-hosted GitHub App.
+- The opencode-agent GitHub App and its installation/token-exchange services
+  are external OpenCode infrastructure that Lato neither operates nor
+  replaces today; Lato does not ship a GitHub App of its own, and no
+  repository files were changed.
+- `lato-cli github run` remains available inside GitHub Actions: with
+  `USE_GITHUB_TOKEN=true` it performs no OpenCode-hosted token exchange, and
+  `OIDC_BASE_URL` can point OIDC-based exchange at an operator-supplied
+  server when one exists.
+- Outro: "GitHub agent installation is not available in this Lato build."
+
+No network calls, browser opens, or file writes occur on this path.
+
+### github run preservation
+
+`packages/opencode/src/cli/cmd/github.handler.ts` `githubRun` is byte-for-byte
+unchanged, including `USE_GITHUB_TOKEN`, `OIDC_BASE_URL`, the local mock
+(`--event`/`--token`) path, reactions/comments/PR writing, and Git
+configuration. Its OpenCode-hosted dependencies remain documented in Phase
+6C: `normalizeOidcBaseUrl` defaults to `https://api.opencode.ai` and the
+`exchange_github_app_token[_with_pat]` exchange endpoints are kept as-is per
+the change-scope decision (no API request shapes or headers altered). The
+imports `githubRun` uses (Octokit, graphql, `@actions/*`, webhooks types,
+InstanceRef, Session/SessionPrompt/EventV2Bridge, Git, sleep, Process,
+extractResponseText/formatPromptTooLargeError) were verified still in use.
+
+### Command description
+
+`packages/opencode/src/cli/cmd/github.ts`: the `install` subcommand describe
+changed from "install the GitHub agent" to "explain why OpenCode GitHub agent
+installation is unavailable in Lato" (help accuracy only). `github run`
+("run the GitHub agent") and the parent `github` ("manage GitHub agent")
+descriptions are unchanged. No registration, flag, or argument changes.
+
+### Unrelated GitHub functionality preserved
+
+`parseGitHubRemote` canonically lives in
+`packages/opencode/src/util/repository.ts` (the removed import was a
+handler-local convenience); `lato-cli pr` and git tooling do not import
+`github.shared` and are unaffected. `extractResponseText` and
+`formatPromptTooLargeError` remain exported and used by `githubRun`.
+
+### Validation
+
+- Static inspection of the full modified region plus surrounding code;
+  brace-structure integrity verified with the Bun deserializer parse of the
+  file (parse-only, not a typecheck or build).
+- Confirmed the stub path contains no `fetch`, no `api.opencode.ai`, no
+  `github.com/apps/opencode-agent` execution, and no workflow-file write;
+  those references now exist only in the explanatory comment and in
+  `githubRun`, which is unchanged.
+- `git status --short`, `git diff`, `git diff --check` reviewed.
+
+### Deferred Phase 7 work (from the independence audit)
+
+`github run` OpenCode-hosted token exchange, `models.opencode.ai` catalog
+default, Zen provider separation, schema/doc-link URL pass, translation
+execution, desktop identity migration, and SDK/OpenAPI naming remain
+documented Phase 7 subphases pending their own approvals.

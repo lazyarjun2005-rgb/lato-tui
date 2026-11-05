@@ -6,7 +6,7 @@ export { extractResponseText, formatPromptTooLargeError, parseGitHubRemote } fro
 
 export const GithubInstallCommand = effectCmd({
   command: "install",
-  describe: "install the GitHub agent",
+  describe: "explain why OpenCode GitHub agent installation is unavailable in Lato",
   handler: () =>
     Effect.gen(function* () {
       const { githubInstall } = yield* Effect.promise(() => import("./github.handler"))
